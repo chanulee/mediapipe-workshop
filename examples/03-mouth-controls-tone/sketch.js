@@ -1,13 +1,14 @@
 import { Tracker } from "../../lib/tracker.js";
-import { mapRange } from "../../lib/utils.js";
+import { mapRange, drawVideo } from "../../lib/utils.js";
 
 const tracker = new Tracker({ face: true, hands: false, smoothing: 0.7 });
 
 let face = null;
+let video = null;
 let osc = null;
 let started = false;
 
-tracker.onUpdate((d) => { face = d.face; });
+tracker.onUpdate((d) => { face = d.face; video = d.video; });
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -28,6 +29,8 @@ function startAudio() {
 
 function draw() {
   background(20);
+  drawVideo(video, drawingContext, width, height, { opacity: 0.7 });
+  noStroke();
   fill(220);
 
   if (!started) {

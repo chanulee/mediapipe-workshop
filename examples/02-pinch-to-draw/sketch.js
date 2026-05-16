@@ -1,14 +1,16 @@
 import { Tracker } from "../../lib/tracker.js";
 import { INDEX_TIP, THUMB_TIP } from "../../lib/landmarks.js";
+import { drawVideo, videoFit, toCanvas } from "../../lib/utils.js";
 
 const tracker = new Tracker({ face: false, hands: true, maxHands: 1, smoothing: 0.6 });
 
 let hands = [];
+let video = null;
 let canvas; // off-screen layer we accumulate strokes into
 let wasPinching = false;
 let prevPoint = null;
 
-tracker.onUpdate((d) => { hands = d.hands; });
+tracker.onUpdate((d) => { hands = d.hands; video = d.video; });
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -20,6 +22,7 @@ function setup() {
 
 function draw() {
   background(15);
+  drawVideo(video, drawingContext, width, height, { opacity: 0.6 });
   image(canvas, 0, 0);
 
   if (hands.length === 0) {
@@ -33,10 +36,11 @@ function draw() {
   const isPinching = pinch > 0.75;
 
   // Midpoint between thumb and index — feels like the actual "pinch point".
-  const thumb = h.point(THUMB_TIP);
-  const index = h.point(INDEX_TIP);
-  const px = ((thumb.x + index.x) / 2) * width;
-  const py = ((thumb.y + index.y) / 2) * height;
+  const fit = videoFit(video, width, height);
+  const thumb = toCanvas(h.point(THUMB_TIP), fit);
+  const index = toCanvas(h.point(INDEX_TIP), fit);
+  const px = (thumb.x + index.x) / 2;
+  const py = (thumb.y + index.y) / 2;
 
   if (isPinching) {
     if (!wasPinching) prevPoint = { x: px, y: py };

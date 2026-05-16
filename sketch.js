@@ -1,6 +1,6 @@
 import { Tracker } from "./lib/tracker.js";
 import { NOSE_TIP, INDEX_TIP } from "./lib/landmarks.js";
-import { mapRange } from "./lib/utils.js";
+import { mapRange, drawVideo, videoFit, toCanvas } from "./lib/utils.js";
 
 const tracker = new Tracker({ face: true, hands: true });
 
@@ -22,56 +22,34 @@ function setup() {
 
 function draw() {
   background(10);
+  drawVideo(video, drawingContext, width, height);
 
-  // Live camera feed — flip horizontally so it matches the mirrored landmarks.
-  if (video && video.readyState >= 2) {
-    push();
-    translate(width, 0);
-    scale(-1, 1);
-    const { dw, dh, dx, dy } = coverFit(video.videoWidth, video.videoHeight, width, height);
-    image(video, dx, dy, dw, dh);
-    pop();
-  }
+  // Landmarks are normalised against the video, not the canvas — map them
+  // through the same cover-fit rectangle the video uses so dots stay locked
+  // to the feed regardless of window shape.
+  const fit = videoFit(video, width, height);
 
-  // Draw a circle at the nose if a face is detected
+  // Yellow dot on the nose — size driven by how open the mouth is.
   if (face) {
-    const nose = face.point(NOSE_TIP);
-    const size = mapRange(face.signals.mouthOpen, 0, 0.6, 40, 400);
-    fill(200, 255, 0);
-    circle(nose.x * width, nose.y * height, size);
+    const nose = toCanvas(face.point(NOSE_TIP), fit);
+    const size = mapRange(face.signals.mouthOpen, 0, 1, 40, 400);
+    fill(220, 255, 0);
+    circle(nose.x, nose.y, size);
   }
 
-  // Pink dot on each index fingertip — size driven by hand openness
-  // (closed fist = small, fully open hand = large).
+  // Pink dot on each index fingertip — size driven by hand openness.
   hands.forEach((h) => {
-    const tip = h.point(INDEX_TIP);
-    const size = mapRange(h.signals.openness, 0, 1, 15, 120);
-    fill(255, 60, 110);
-    circle(tip.x * width, tip.y * height, size);
+    const tip = toCanvas(h.point(INDEX_TIP), fit);
+    const size = mapRange(h.signals.openness, 0, 1, 20, 200);
+    fill(255, 60, 130);
+    circle(tip.x, tip.y, size);
   });
-}
-
-// Scale the video to "cover" the canvas while keeping aspect ratio.
-function coverFit(srcW, srcH, dstW, dstH) {
-  if (!srcW || !srcH) return { dw: dstW, dh: dstH, dx: 0, dy: 0 };
-  const srcRatio = srcW / srcH;
-  const dstRatio = dstW / dstH;
-  let dw, dh;
-  if (srcRatio > dstRatio) {
-    dh = dstH;
-    dw = dh * srcRatio;
-  } else {
-    dw = dstW;
-    dh = dw / srcRatio;
-  }
-  return { dw, dh, dx: (dstW - dw) / 2, dy: (dstH - dh) / 2 };
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
-// p5 looks for setup/draw on the global scope; ES modules are scoped, so expose them.
 window.setup = setup;
 window.draw = draw;
 window.windowResized = windowResized;

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>06 — data-flow graph</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+  <div id="stage">
+    <div id="canvas">
+      <svg id="edges" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="nodes"></div>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <button data-action="fit">fit</button>
+    <button data-action="reset">reset</button>
+    <button data-action="pause" id="pause-btn">pause</button>
+    <span class="sep"></span>
+    <span class="readout">zoom <span id="zoom-readout">100%</span></span>
+    <span class="readout">tracker <span id="fps-readout">—</span> fps</span>
+    <span class="hint">drag empty space to pan · wheel to zoom</span>
+  </div>
+
+  <div id="legend">
+    <div class="title">data type</div>
+    <div><span class="swatch video"></span> video frames</div>
+    <div><span class="swatch landmarks"></span> raw landmarks</div>
+    <div><span class="swatch signals"></span> derived signals</div>
+  </div>
+
+  <script type="module" src="./sketch.js"></script>
+</body>
+</html>

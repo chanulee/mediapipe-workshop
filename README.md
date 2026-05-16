@@ -30,7 +30,9 @@ Zero-install starter for live **face + hand tracking in the browser** using p5.j
     ├── 01-particles-follow-nose/
     ├── 02-pinch-to-draw/
     ├── 03-mouth-controls-tone/
-    └── 04-two-hands-stretch-image/
+    ├── 04-two-hands-stretch-image/
+    ├── 05-master-controls/      live data inspector + landmark indices
+    └── 06-data-flow-graph/      TouchDesigner-style pipeline visualiser
 ```
 
 Each example folder is self-contained — open its `index.html` directly.

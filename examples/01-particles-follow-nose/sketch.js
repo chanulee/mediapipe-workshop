@@ -1,13 +1,14 @@
 import { Tracker } from "../../lib/tracker.js";
 import { NOSE_TIP } from "../../lib/landmarks.js";
-import { mapRange } from "../../lib/utils.js";
+import { mapRange, drawVideo, videoFit, toCanvas } from "../../lib/utils.js";
 
 const tracker = new Tracker({ face: true, hands: false });
 
 let face = null;
+let video = null;
 const particles = [];
 
-tracker.onUpdate((d) => { face = d.face; });
+tracker.onUpdate((d) => { face = d.face; video = d.video; });
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -24,12 +25,17 @@ function setup() {
 }
 
 function draw() {
-  background(10, 30);
+  // Draw the camera fresh each frame, then a translucent dark veil over it.
+  // The veil dims the feed and also creates the particle motion-trail effect.
+  drawVideo(video, drawingContext, width, height);
+  noStroke();
+  fill(10, 180);
+  rect(0, 0, width, height);
 
   let target = null;
   if (face) {
-    const nose = face.point(NOSE_TIP);
-    target = { x: nose.x * width, y: nose.y * height };
+    const fit = videoFit(video, width, height);
+    target = toCanvas(face.point(NOSE_TIP), fit);
     fill(255, 200, 0);
     circle(target.x, target.y, 12);
   }
