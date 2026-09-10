@@ -6,6 +6,7 @@ import { toys,freshSettings,inputControls,sceneControls } from './catalog.mjs';
 const face={point:i=>({1:{x:.5,y:.3},33:{x:.6,y:.3},263:{x:.4,y:.3}}[i]),signals:{mouthOpen:.5,smile:.4,eyebrowRaise:.7}};
 const hand=(x,label)=>({handedness:label,point:i=>({x:i===4?x-.1:x,y:.6}),signals:{pinch:.8,openness:.4,fingerCount:3}});
 const hands=[hand(.2,'Left'),hand(.8,'Right')];
+assert.deepEqual(inputValue(undefined,face,hands),{valid:false,value:0,points:[]});
 for(const source of Object.keys(sources)){assert.equal(inputValue(source,null,[]).valid,false,source);const v=inputValue(source,face,hands);assert(v.valid,source);assert(v.value>=0&&v.value<=1,source);}
 assert.equal(inputValue('hands',face,[hands[0]]).valid,false);
 assert.equal(inputValue('noseHand',null,hands).valid,false);

@@ -9,6 +9,7 @@ export const pointers = { hand: '검지', pinch: '엄지와 검지 가운데', n
 export function primaryHand(hands, side = 'auto') { return side === 'auto' ? [...hands].sort((a,b) => a.handedness.localeCompare(b.handedness))[0] : hands.find(h => h.handedness === side); }
 const gap = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 export function inputValue(source, face, hands, side = 'auto') {
+  if (!Object.hasOwn(sources, source)) return { valid: false, value: 0, points: [] };
   const hand = primaryHand(hands, side), tip = hand?.point(INDEX_TIP), thumb = hand?.point(THUMB_TIP), nose = face?.point(NOSE_TIP);
   let value = null, points = [];
   if (source === 'hands' && hands.length >= 2) { points = hands.slice(0,2).map(h => h.point(INDEX_TIP)); value = mapRange(gap(...points), .08,.7,0,1); }
