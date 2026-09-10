@@ -1,3 +1,4 @@
+import { createExplorer } from './explorer.js';
 import { INDEX_TIP } from '../lib/landmarks.js';
 import { drawVideo, videoFit, toCanvas, dist, smooth } from '../lib/utils.js';
 import { steps, completes, reaction } from './lesson.mjs';
@@ -5,16 +6,32 @@ import { setupCapture } from './recorder.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage'), ctx = canvas.getContext('2d');
-let step = 0, complete = false, transition, tracker, video, hands = [], demo = false;
+let step = 0, complete = false, transition, tracker, video, face = null, hands = [], demo = false;
 let generation = 0, cameraBusy = false, lastSeen = 0, heldSince = 0, baseline = null;
 let distance = 0.2, reverse = false, customImage = null, imageGeneration = 0;
-const capture = setupCapture(canvas, $('photo'), $('record'), $('capture-status'), $('save-status'), $('download'));
+const explorer = createExplorer(canvas, () => capture.stop());
+const capture = setupCapture(canvas, $('photo'), $('record'), $('capture-status'), $('save-status'), $('download'), explorer.getAudioTracks);
+const imageControl = document.querySelector('[data-control="image"]');
+const imageHome = imageControl.parentNode;
+let exploring = false;
 
 function renderStep() {
   clearTimeout(transition);
   complete = false; heldSince = 0; baseline = null;
   const free = step === steps.length;
   const current = steps[step];
+  $('tutorial-panel').hidden = free;
+  $('explorer').hidden = !free;
+  document.body.classList.toggle('exploring', free);
+  if (free && !exploring) {
+    exploring = true;
+    explorer.enter({ amount:+$('amount').value, sensitivity:+$('sensitivity').value/100, reverse, effect:$('effect').value });
+    $('explore-image').append(imageControl);
+    if (!demo && video) startCamera();
+  } else if (!free && exploring) {
+    exploring = false; explorer.reset(); imageHome.insertBefore(imageControl, $('next'));
+    $('stage-title').textContent = 'Stretch it!'; $('stage-eyebrow').textContent = '01 / 두 손으로 놀기'; $('sensor-label').textContent = '두 손 사이';
+  }
   $('step-label').textContent = free ? 'MY VERSION · 나만의 장난감' : `STEP ${step + 1} / ${steps.length}`;
   $('progress').value = step;
   $('progress-value').textContent = `${Math.round(step / steps.length * 100)}%`;
@@ -22,7 +39,8 @@ function renderStep() {
   $('step-detail').textContent = free ? '가장 재미있는 반응 하나를 골라 조금만 바꿔보세요. 완성하면 사진이나 영상으로 남겨요.' : current.detail;
   $('step-icon').textContent = free ? '★' : current.icon;
   $('success').textContent = '';
-  $('next').hidden = true;
+  $('next').hidden = step !== 7;
+  $('next').textContent = step === 7 ? '튜토리얼 끝! 자유롭게 놀기 →' : '다음으로 →';
   document.querySelectorAll('[data-control]').forEach(el => {
     const visible = free ? el.dataset.control !== 'camera' : el.dataset.control === current.control;
     el.hidden = !visible;
@@ -44,7 +62,8 @@ $('next').onclick = advance;
 $('teacher-next').onclick = advance;
 function stopCamera() {
   generation++;
-  tracker?.stop(); tracker = null; video = null; hands = [];
+  tracker?.stop(); tracker = null; video = null; face = null; hands = [];
+  explorer.mute();
   cameraBusy = false; $('camera').disabled = false;
 }
 async function startCamera() {
@@ -67,10 +86,10 @@ async function startCamera() {
     // Load the external runtime only here: demo and local assets work if the CDN fails.
     const { Tracker } = await import('../lib/tracker.js');
     if (attempt !== generation) return;
-    candidate = new Tracker({ face: false, hands: true, maxHands: 2, smoothing: 0.6 });
+    candidate = new Tracker({ face: step === steps.length, hands: true, maxHands: 2, smoothing: 0.6 });
     candidate.onUpdate(data => {
       if (attempt !== generation) { candidate.stop(); return; }
-      hands = data.hands; video = data.video; lastSeen = performance.now();
+      hands = data.hands; face = data.face; video = data.video; lastSeen = performance.now();
     });
     await candidate.start();
     if (attempt !== generation) { candidate.stop(); return; }
@@ -142,6 +161,7 @@ $('reset').onclick = () => {
 window.addEventListener('pagehide', () => { capture.stop(); stopCamera(); });
 function draw(now) {
   const w = canvas.width, h = canvas.height;
+  if (step === steps.length) { explorer.draw({now,video,face:now-lastSeen<1200?face:null,hands:now-lastSeen<1200?hands:[],demo,img:customImage,tracker});requestAnimationFrame(draw);return; }
   ctx.fillStyle = '#12283c'; ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = '#ffffff0b'; ctx.lineWidth = 1;
   for (let x = 0; x < w; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }

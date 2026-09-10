@@ -1,5 +1,5 @@
 // One canvas contains the camera and artwork; controls never enter the capture.
-export function setupCapture(canvas, photo, record, overlay, status, link) {
+export function setupCapture(canvas, photo, record, overlay, status, link, getAudioTracks = () => []) {
   let recorder, stream, timer, url, active = false;
   const supported = typeof MediaRecorder !== 'undefined' && !!canvas.captureStream;
   record.disabled = !supported;
@@ -39,6 +39,7 @@ export function setupCapture(canvas, photo, record, overlay, status, link) {
       clearInterval(timer);
       try {
         stream = canvas.captureStream(30);
+        for (const track of getAudioTracks()) stream.addTrack(track.clone());
         const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(type => MediaRecorder.isTypeSupported(type));
         recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
         const chunks = [];

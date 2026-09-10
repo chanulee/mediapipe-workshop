@@ -10,15 +10,16 @@
 <header><a class="brand" href="./">몸으로 노는 실험실 <span>AI YOUNG CREATORS</span></a><button id="reset" class="quiet">↺ 처음부터</button></header>
 <main>
   <section class="play" aria-label="인터랙션 무대">
-    <div class="stage-heading"><div><span class="eyebrow">01 / 두 손으로 놀기</span><h1>Stretch it<span>!</span></h1></div><span id="mode" class="badge">시작할 준비!</span></div>
+    <div class="stage-heading"><div><span id="stage-eyebrow" class="eyebrow">01 / 두 손으로 놀기</span><h1 id="stage-title">Stretch it!</h1></div><span id="mode" class="badge">시작할 준비!</span></div>
     <div class="stage-wrap"><canvas id="stage" width="960" height="720" aria-label="손 사이에서 변하는 내 그림"></canvas><div id="capture-status" role="status"></div></div>
-    <div class="sensors"><div><span class="eyebrow">CAMERA SEES · 컴퓨터가 보는 것</span><p id="hands">손 0 / 2</p></div><div class="distance"><label for="distance">두 손 사이 <output id="distance-value">—</output></label><meter id="distance" min="0" max="100" value="0">0</meter></div></div>
+    <div class="sensors"><div><span class="eyebrow">CAMERA SEES · 컴퓨터가 보는 것</span><p id="hands">손 0 / 2</p></div><div class="distance"><label for="distance"><span id="sensor-label">두 손 사이</span> <output id="distance-value">—</output></label><meter id="distance" min="0" max="100" value="0">0</meter></div></div>
     <p id="tracking-hint">카메라를 켜면 여기에 내 모습이 보여요.</p>
-    <div id="demo-controls" hidden><label for="demo-distance">두 손 대신 움직여요 <span>모으기 ↔ 벌리기</span></label><input id="demo-distance" type="range" min="0" max="100" value="25"></div>
+    <div id="demo-controls" hidden><label for="demo-distance">입력 값 바꾸기 <span>작게 ↔ 크게</span></label><input id="demo-distance" type="range" min="0" max="100" value="25"></div>
     <div class="capture"><button id="photo">📸 사진 저장</button><button id="record">● 10초 영상 저장</button></div>
     <p id="save-status" role="status">저장한 사진이나 영상을 Google Drive의 내 폴더에 올려주세요.</p><a id="download" hidden>파일 다시 저장</a>
   </section>
-  <aside aria-label="따라 하기">
+  <aside aria-label="따라 하기와 전체 컨트롤">
+    <div id="tutorial-panel">
     <div class="lesson-top"><span id="step-label" class="eyebrow">STEP 1 / 8</span><span id="progress-value">0%</span></div><progress id="progress" max="8" value="0" aria-label="수업 진행률"></progress>
     <div id="instruction" aria-live="polite"><div id="step-icon">✋</div><h2 id="step-title">카메라를 켜세요.</h2><p id="step-detail">두 손으로 그림을 움직여 볼까요?</p><p id="success"></p></div>
     <div id="camera-control" data-control="camera"><button id="camera" class="primary">카메라 켜기</button><p class="small">카메라와 그림은 서버에 저장하지 않아요. 마이크는 사용하지 않아요.</p></div>
@@ -28,10 +29,23 @@
     <div data-control="effect" hidden><label for="effect">손 사이에 연결할 반응</label><select id="effect"><option value="size">커지기</option><option value="rotate">빙글 돌기</option><option value="opacity">나타나기</option><option value="shake">흔들리기</option></select></div>
     <div data-control="sensitivity" hidden><label for="sensitivity">작은 움직임에도 반응하기</label><input id="sensitivity" type="range" min="50" max="200" value="100"><div class="range-labels"><span>천천히</span><span>민감하게</span></div></div>
     <button id="next" class="primary" hidden>다음으로 →</button>
+    </div>
+    <section id="explorer" hidden aria-label="전체 컨트롤 패널">
+      <span class="eyebrow">TUTORIAL COMPLETE / EXPLORE</span><h2>이제 자유롭게 놀아요.</h2>
+      <label for="toy-select">어떤 장난감으로 놀까요?</label><select id="toy-select"></select><p id="toy-hint"></p>
+      <p id="live-values" class="live-values"></p>
+      <details open><summary>01 · 무엇으로 움직일까?</summary><p id="input-description" class="small"></p><div id="explore-inputs"></div></details>
+      <details open><summary>02 · 어떻게 반응할까?</summary><div id="explore-effects"></div></details>
+      <div id="explore-image"></div>
+      <button id="audio-toggle" class="primary" hidden>♪ 소리 켜기</button><button id="clear-drawing" hidden>그림 지우기</button>
+      <details><summary>03 · 무대와 색</summary><div id="explore-scene"></div></details>
+      <button id="toy-reset" class="quiet">이 장난감 설정만 되돌리기</button><p id="explore-status" role="status"></p>
+    </section>
     <div class="help"><p id="camera-error" role="status"></p><button id="demo" class="quiet">카메라가 안 되나요? 손 없이 해보기</button><button id="retry" class="quiet" hidden>카메라 다시 켜기</button><details><summary>선생님 도움</summary><button id="teacher-next" class="quiet">이 단계 넘어가기</button></details></div>
   </aside>
 </main>
 <footer>PLAY → CHANGE → COMPARE → MY VERSION <span>손을 움직이고, 반응을 바꿔요.</span></footer>
 <noscript>이 장난감은 JavaScript가 켜진 Chrome 또는 Edge에서 열어주세요.</noscript>
+<script src="./vendor/opentype.min.js"></script>
 <script type="module" src="./app.js"></script>
 </body></html>

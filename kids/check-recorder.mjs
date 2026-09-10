@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setupCapture } from './recorder.js';
-let tick = 0, sequence = 0, stopped = 0, visibility;
+let tick = 0, sequence = 0, stopped = 0, audioStopped = 0, visibility;
 const timers = new Map();
 globalThis.setInterval = (fn, delay) => { const id = ++sequence; timers.set(id, { fn, delay, next: tick + delay }); return id; };
 globalThis.clearInterval = id => timers.delete(id);
@@ -15,8 +15,9 @@ class Recorder {
 globalThis.MediaRecorder = Recorder;
 function el() { return { textContent: '', disabled: false, hidden: true, click() { this.clicks = (this.clicks || 0) + 1; } }; }
 const photo = el(), record = el(), overlay = el(), status = el(), link = el();
-const canvas = { toBlob: fn => fn(new Blob(['png'])), captureStream: () => ({ getTracks: () => [{ stop: () => stopped++ }] }) };
-const capture = setupCapture(canvas, photo, record, overlay, status, link);
+const canvas = { toBlob: fn => fn(new Blob(['png'])), captureStream: () => { const tracks=[{stop:()=>stopped++}];return {getTracks:()=>tracks,addTrack:track=>tracks.push(track)}; } };
+const audioTrack={clone:()=>({stop:()=>audioStopped++}),stop:()=>assert.fail('Original audio track must stay alive')};
+const capture = setupCapture(canvas, photo, record, overlay, status, link, ()=>[audioTrack]);
 function advance(ms) {
   const end = tick + ms;
   while (true) {
@@ -31,5 +32,5 @@ record.onclick(); assert.equal(capture.active, true); advance(2999); assert.equa
 advance(1); assert.match(overlay.textContent, /10초/); advance(9999); assert.equal(link.clicks, 1);
 advance(1); assert.equal(link.clicks, 2); assert(link.download.endsWith('.webm')); assert.equal(capture.active, false); assert.equal(stopped, 1);
 record.onclick(); advance(1000); capture.stop(); advance(13000); assert.equal(link.clicks, 2); assert.equal(timers.size, 0);
-record.onclick(); advance(4000); document.hidden = true; visibility(); assert.equal(link.clicks, 3); assert.equal(capture.active, false); assert.equal(stopped, 2);
+record.onclick(); advance(4000); document.hidden = true; visibility(); assert.equal(link.clicks, 3); assert.equal(capture.active, false); assert.equal(stopped, 2); assert.equal(audioStopped, 2);
 console.log('PASS: photo, 3-second countdown, 10-second recording, cancel, early save, track cleanup');
