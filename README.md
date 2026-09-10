@@ -2,6 +2,10 @@
 
 Zero-install starter for live **face + hand tracking in the browser** using p5.js and MediaPipe Tasks Vision. The point: spend your time on the *mapping* — what your project does with the signals — not on plumbing.
 
+## Kids Guided Mode
+
+초6–중2 온라인 수업용 **[Stretch It!](kids/)**: 코딩 없이 두 손으로 그림을 움직이고, 단계별 안내에 따라 효과·방향·이미지를 바꾼 뒤 사진과 10초 영상으로 저장합니다. 카메라가 안 되면 데모 슬라이더로 참여할 수 있습니다. 실행·배포·수업 운영은 [Kids 안내](kids/README.md)를 참고하세요.
+
 ## Quickstart (60 seconds)
 
 1. Clone or download this repo.
