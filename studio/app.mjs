@@ -19,7 +19,7 @@ document.querySelector('.connections-section').before(rulesPanel);
 const gameStyle=document.createElement('link');gameStyle.rel='stylesheet';gameStyle.href=new URL('./games.css',import.meta.url);document.head.append(gameStyle);
 const params=new URLSearchParams(location.search), roomId=params.get('room');
 let teacherToken='', identity=null, project=fromPreset(), image=null, localImage=null, localName='', viewing=null, room=null, mode='welcome';
-let extraImages={},localImages={},imageKey='image',assetGeneration=0;
+let extraImages={},localImages={},imageKey='image',assetGeneration=0,shareUntil=0;
 function imageData(img){if(!img)return null;const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);return c.toDataURL('image/webp',.8);}
 const imageSlot=document.createElement('label');imageSlot.className='control';imageSlot.textContent='어디에 넣을 그림인가요?';
 const imageSelect=document.createElement('select');imageSelect.setAttribute('aria-label','이미지 자리');imageSlot.append(imageSelect);$('image-control').prepend(imageSlot);
@@ -197,7 +197,7 @@ async function copy(id){try{await navigator.clipboard.writeText($(id).value);$('
 $('copy-student').onclick=()=>copy('student-link');$('copy-teacher').onclick=()=>copy('teacher-link');
 $('copy-reentry').onclick=()=>copy('reentry-link');
 $('start-game').onclick=()=>{game.engine.start(project.settings);$('game-status').textContent='3, 2, 1… 도전!';};
-async function copyWorkLink(w,host,status){const url=`${location.origin}/${Object.hasOwn(gameToys,w.toy||w.project?.toy)?'challenges':'studio'}/?room=${roomId}&work=${w.id}`;let input=host.querySelector('.share-link');if(!input){input=document.createElement('input');input.className='share-link';input.readOnly=true;input.setAttribute('aria-label','공유할 작품 링크');host.append(input);}input.value=url;try{await navigator.clipboard.writeText(url);status.textContent='✓ 링크를 복사했어요. 로그인 없이 플레이할 수 있어요.';}catch{input.focus();input.select();status.textContent='아래 링크를 길게 누르거나 선택해서 복사해주세요.';}}
+async function copyWorkLink(w,host,status){shareUntil=Date.now()+60000;const url=`${location.origin}/${Object.hasOwn(gameToys,w.toy||w.project?.toy)?'challenges':'studio'}/?room=${roomId}&work=${w.id}`;let input=host.querySelector('.share-link');if(!input){input=document.createElement('input');input.className='share-link';input.readOnly=true;input.setAttribute('aria-label','공유할 작품 링크');host.append(input);}input.value=url;try{await navigator.clipboard.writeText(url);status.textContent='✓ 링크를 복사했어요. 로그인 없이 플레이할 수 있어요.';}catch{input.focus();input.select();status.textContent='아래 링크를 길게 누르거나 선택해서 복사해주세요.';}}
 $('copy-challenge').onclick=async()=>{try{if(!roomId)throw Error('함께하는 수업에서 친구 챌린지에 올린 뒤 링크를 복사해요.');const id=viewing?.id||identity?.id;if(!id)throw Error('먼저 챌린지를 골라주세요.');const w=await request(`${base()}/${id}`,{token:''});if(!w.published)throw Error('먼저 친구 챌린지에 올려주세요.');await copyWorkLink(w,gameActions,$('game-status'));}catch(e){$('game-status').textContent=e.message;}};
 $('trash-toggle').onclick=()=>{trash=!trash;$('trash-toggle').textContent=trash?'학생 목록으로':'휴지통';$('reentry').hidden=true;list(true);};
 async function imageFile(file){
@@ -295,5 +295,5 @@ async function init(){
     if(teacherToken){$('class-name').textContent=room.title;const classUrl=`${location.origin}${location.pathname}?room=${roomId}`;$('student-link').value=classUrl+'&role=student';$('teacher-link').value=classUrl+`#teacher=${teacherToken}`;show('classroom');list(true);}
   }catch(e){$('entry-status').textContent=e.message;$('join-button').disabled=true;}
 }
-setInterval(()=>{if(!roomId||document.hidden)return;if(mode==='classroom')list(true);if(mode==='friends')list();if(mode==='workspace'&&!viewing&&identity)request(`${base()}/${identity.id}`).then(w=>renderNotes(w.feedback)).catch(()=>{});if(mode==='workspace'&&!viewing&&revision>savedRevision)save();},8000);
+setInterval(()=>{if(!roomId||document.hidden)return;if(mode==='classroom'&&Date.now()>shareUntil)list(true);if(mode==='friends'&&Date.now()>shareUntil)list();if(mode==='workspace'&&!viewing&&identity)request(`${base()}/${identity.id}`).then(w=>renderNotes(w.feedback)).catch(()=>{});if(mode==='workspace'&&!viewing&&revision>savedRevision)save();},8000);
 requestAnimationFrame(draw);init();
