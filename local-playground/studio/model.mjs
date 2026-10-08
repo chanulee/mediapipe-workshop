@@ -2,7 +2,7 @@ import { toys as originalToys } from '../kids/catalog.mjs';
 import { gameToys, gameOutputs } from './games.mjs';
 import { sources, pointers, mappedValue } from '../kids/inputs.mjs';
 export const toys={...originalToys,...gameToys};
-export const imageKeys=['image','foodImage','coverImage'];
+export const imageKeys=['image','foodImage','coverImage',...Array.from({length:4},(_,i)=>`hazardImage${i+1}`)];
 
 export const outputs = { reaction:'장난감의 반응', ...gameOutputs };
 export const allowedOutputs=toy=>Object.fromEntries(Object.entries(outputs).filter(([key])=>Object.hasOwn(gameToys,toy)?key!=='reaction'&&(toy==='catch'||!['moveX','moveY'].includes(key)):!['moveX','moveY'].includes(key)));
@@ -23,7 +23,7 @@ export function fromPreset(index=0) {
   const settings={...toys[toy].defaults};
   if(toy==='outline') settings.pointer='nose';
   if(toy==='stretch') settings.placement='center';
-  return {toy,settings,connections:[newConnection(source,output)],title:'',instruction:'',image:null,foodImage:null,coverImage:null};
+  return {toy,settings,connections:[newConnection(source,output)],title:'',instruction:'',...Object.fromEntries(imageKeys.map(key=>[key,null]))};
 }
 export function normalize(raw) {
   if(!raw || !Object.hasOwn(toys,raw.toy)) throw new Error('장난감을 다시 골라주세요.');

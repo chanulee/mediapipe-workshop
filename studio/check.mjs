@@ -40,7 +40,7 @@ assert.equal((await call(`${base}/${a.id}`)).body.feedback.length,0);
 const upload=await api(new Request(`https://class.example${base}/${a.id}/image`,{method:'POST',headers:{Authorization:'Bearer '+a.secret,'Content-Type':'image/webp'},body:new Uint8Array([82,73,70,70])}),env);
 const image=(await upload.json()).image;project.image=image;await call(`${base}/${a.id}`,'PUT',{project},a.secret);
 const extra=[];for(let i=0;i<3;i++){const response=await api(new Request(`https://class.example${base}/${a.id}/image`,{method:'POST',headers:{Authorization:'Bearer '+a.secret,'Content-Type':'image/png'},body:new Uint8Array([137,80,78,71,i])}),env);extra.push((await response.json()).image);}
-project.foodImage=extra[0];project.coverImage=extra[1];await call(`${base}/${a.id}`,'PUT',{project},a.secret);
+project.foodImage=extra[0];project.coverImage=extra[1];project.hazardImage1=extra[0];await call(`${base}/${a.id}`,'PUT',{project},a.secret);
 for(const id of extra.slice(0,2))assert.equal((await api(new Request(`https://class.example${base}/${a.id}/image/${id}`),env)).status,403);
 assert.equal(normalize({...project,foodImage:'https://untrusted.example/a.png'}).foodImage,null);
 assert.equal((await api(new Request(`https://class.example${base}/${a.id}/image/${image}`),env)).status,403);
@@ -49,9 +49,10 @@ for(const id of extra.slice(0,2))assert.equal((await api(new Request(`https://cl
 project.coverImage=extra[2];await call(`${base}/${a.id}`,'PUT',{project},a.secret);
 assert.equal((await call(base)).body.works[0].coverImage,extra[1]);
 assert.equal((await api(new Request(`https://class.example${base}/${a.id}/image/${extra[2]}`),env)).status,403);
-const legacy={...project};delete legacy.foodImage;delete legacy.coverImage;
+const legacy={...project};delete legacy.foodImage;delete legacy.coverImage;delete legacy.hazardImage1;
 await call(`${base}/${a.id}`,'PUT',{project:legacy},a.secret);
 assert.equal((await call(`${base}/${a.id}`,'GET',null,a.secret)).body.project.coverImage,extra[2]);
+assert.equal((await call(`${base}/${a.id}`,'GET',null,a.secret)).body.project.hazardImage1,extra[0]);
 await call(`${base}/${a.id}/publish`,'POST',{project:legacy},a.secret);
 assert.equal((await call(`${base}/${a.id}`)).body.project.foodImage,extra[0]);
 await call(`${base}/${a.id}`,'PUT',{project:{...project,foodImage:null}},a.secret);
@@ -88,5 +89,13 @@ challenge.settings.mode='timeattack';challenge.settings.duration=45;challenge.se
 await call(`${base}/${c.id}/publish`,'POST',{project:challenge},c.secret);
 const sharedRule=(await call(`${base}/${c.id}`)).body.project.settings;
 assert.equal(sharedRule.mode,'timeattack');assert.equal(sharedRule.duration,45);assert.equal(sharedRule.goal,10);
+const custom=gamePreset();custom.settings.hazards=2;custom.settings.hazardAction1='gameover';custom.settings.hazardPenalty2=5;
+const d=(await call(base,'POST',{name:'장애물 테스트',project:custom})).body;
+await call(`${base}/${d.id}/publish`,'POST',{project:custom},d.secret);
+assert.equal((await call(`${base}/${d.id}`)).body.project.settings.hazardAction1,'gameover');
+const oldTab=structuredClone(custom);for(const key of Object.keys(oldTab.settings))if(/^hazard(Action|Penalty)/.test(key))delete oldTab.settings[key];
+await call(`${base}/${d.id}`,'PUT',{project:oldTab},d.secret);
+const resumed=(await call(`${base}/${d.id}`,'GET',null,d.secret)).body.project;
+assert.equal(resumed.settings.hazardAction1,'gameover');assert.equal(resumed.settings.hazardPenalty2,5);
 console.log('PASS: 7 presets, mapping, owner/teacher permissions, snapshots, images, feedback, student reentry keys, deletion, restore and challenge sharing');
 db.close();

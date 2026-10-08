@@ -31,4 +31,17 @@ for(let i=0;i<10;i++)game.step('catch',unlimited,p,.1);assert.equal(game.state.p
 const legacy={...fit};delete legacy.mode;delete legacy.timeLimit;const restored=normalize({...gamePreset(2),settings:legacy});assert.equal(restored.settings.mode,'target');assert.equal(restored.settings.timeLimit,true);
 assert.equal(gameRule('catch',unlimited),'10개 모으기');assert.equal(gameRule('catch',attack),'10초 동안 최대한 많이 모으기');
 assert.equal(normalize({...gamePreset(),settings:{...s,mode:'invalid'}}).settings.mode,'target');
+const hazards={...gamePreset().settings,hazards:2,speed:0,goal:50,hazardAction1:'penalty',hazardPenalty1:3,hazardAction2:'gameover'};
+function beginHazards(settings=hazards){game.start(settings);for(let i=0;i<31;i++)game.step('catch',settings,{x:0,y:0},.1);game.state.star={x:.8,y:.8,phase:0};game.state.obstacles=[{x:.2,y:.3,phase:0},{x:.7,y:.7,phase:0}];game.state.score=10;}
+beginHazards();const hit1=position(game.state.obstacles[0],0,0),hit2=position(game.state.obstacles[1],0,0);
+game.step('catch',hazards,hit1,.1);assert.equal(game.state.score,7);assert.equal(game.state.phase,'playing');
+game.step('catch',hazards,hit1,.1);assert.equal(game.state.score,7);
+for(let i=0;i<11;i++)game.step('catch',hazards,{x:0,y:0},.1);
+game.step('catch',hazards,hit2,.1);assert.equal(game.state.phase,'lost');
+const lostTime=game.state.elapsed;game.step('catch',hazards,hit1,.1);assert.equal(game.state.elapsed,lostTime);
+beginHazards();game.step('catch',hazards,hit1,.1);game.step('catch',hazards,hit2,.1);assert.equal(game.state.phase,'lost');
+beginHazards();game.state.score=1;game.step('catch',hazards,hit1,.1);assert.equal(game.state.score,0);
+for(const mode of ['target','timeattack']){const settings={...hazards,mode,goal:11};beginHazards(settings);game.state.star={...game.state.obstacles[1]};game.step('catch',settings,hit2,.1);assert.equal(game.state.phase,'lost');}
+const invalidHazard=normalize({...gamePreset(),settings:{...hazards,hazardAction1:'invalid',hazardPenalty1:999}});assert.equal(invalidHazard.settings.hazardAction1,'penalty');assert.equal(invalidHazard.settings.hazardPenalty1,20);
+const oldHazards={...hazards};for(const key of Object.keys(oldHazards))if(/^hazard(Action|Penalty)/.test(key))delete oldHazards[key];const oldGame=normalize({...gamePreset(),settings:oldHazards});assert.equal(oldGame.settings.hazardPenalty1,1);assert.equal(oldGame.settings.hazardAction2,'penalty');
 console.log('PASS: game rules, target and timeattack modes, unlimited target mode, legacy saves, countdown, tracking pause, success, timeout and collisions');

@@ -13,7 +13,7 @@ async function body(req) {
 const clean=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
 const projectOf=value=>{try{return normalize(value);}catch(error){fail(error.message);}};
 // Keep new image slots when a student saves from a tab opened before this update.
-const updatedProject=(value,work)=>projectOf({...Object.fromEntries(imageKeys.slice(1).map(key=>[key,JSON.parse(work.draft)[key]||null])),...value});
+const updatedProject=(value,work)=>{const draft=JSON.parse(work.draft);return projectOf({...Object.fromEntries(imageKeys.slice(1).map(key=>[key,draft[key]||null])),...value,settings:{...Object.fromEntries(Object.entries(draft.settings).filter(([key])=>/^hazard(Action|Penalty)\d$/.test(key))),...value?.settings}});};
 const owns=async(req,work)=>{const value=auth(req)&&await hash(auth(req));return !!value&&(value===work.owner_hash||value===work.access_hash);};
 export async function api(req,env) {
   try {
