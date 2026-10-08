@@ -12,7 +12,7 @@ export const gameToys={
 };
 export const gameOutputs={moveX:'좌우로 움직이기',moveY:'위아래로 움직이기',size:'커지기',rotate:'빙글 돌기',opacity:'나타나기',shake:'흔들리기'};
 export const gamePresets=[['catch','별 먹기 · 코로 조종','noseX','moveX'],['catch','별 먹기 · 손으로 조종','handX','moveX'],['fit','딱 맞춰! · 두 손으로','hands','size'],['fit','딱 맞춰! · 입으로','mouth','size']];
-export function gamePreset(index=0){const [toy,,source,output]=gamePresets[index]||gamePresets[0];const connection=(source,output)=>({source,output,sensitivity:1,reverse:false,smoothing:.35,amount:1});return {toy,settings:{...gameToys[toy].defaults},connections:toy==='catch'?[connection(source,output),connection(source==='handX'?'handY':'noseY','moveY')]:[connection(source,output)],title:toy==='catch'?'별을 모아라!':'딱 맞춰 챌린지',instruction:toy==='catch'?'움직여서 별을 모아봐!':'그림을 테두리에 맞춘 채 잠깐 멈춰봐!',image:null,foodImage:null,coverImage:null,titleImage:null,...Object.fromEntries(Array.from({length:4},(_,i)=>[`hazardImage${i+1}`,null]))};}
+export function gamePreset(index=0){const [toy,,source,output]=gamePresets[index]||gamePresets[0];const connection=(source,output)=>({source,output,sensitivity:1,reverse:false,smoothing:.35,amount:1});return {toy,settings:{...gameToys[toy].defaults},connections:toy==='catch'?[connection(source,output),connection(source==='handX'?'handY':'noseY','moveY')]:[connection(source,output)],title:toy==='catch'?'별을 모아라!':'딱 맞춰!',instruction:toy==='catch'?'움직여서 별을 모아봐!':'그림을 테두리에 맞춘 채 잠깐 멈춰봐!',image:null,foodImage:null,coverImage:null,titleImage:null,...Object.fromEntries(Array.from({length:4},(_,i)=>[`hazardImage${i+1}`,null]))};}
 
 // Game time advances only while inputs are visible and the page is active.
 export function createGame(random=Math.random){
@@ -51,7 +51,7 @@ export function createGameRenderer(canvas){
     const c={x:controls.moveX??.5,y:1-(controls.moveY??.5),size:controls.size??.5,scale:controls.size==null?1:.4+controls.size*1.6};
     const st=engine.step(toy,s,c,document.hidden?0:dt,valid);
     ctx.fillStyle='#101b3250';ctx.fillRect(0,0,540,960);
-    text(toy==='catch'?'별 먹기 챌린지':'딱 맞춰 챌린지',270,125,24,s.color);
+    text(toy==='catch'?'별 모으기':'딱 맞추기',270,125,24,s.color);
     text(gameRule(toy,s),270,165,22);
     if(toy==='catch'){
       const star=position(st.star,s.speed,st.elapsed);if(foodImg)avatar(s,foodImg,star.x*540,star.y*960,s.targetSize);else text('✦',star.x*540,star.y*960+15,s.targetSize,'#ffe078');
@@ -71,7 +71,7 @@ export function createGameRenderer(canvas){
       text('도전 시작을 눌러요',270,660,28,s.color);text('카메라 또는 연습 슬라이더로 조종',270,715,20);
     }else if(['ready','won','ended','lost'].includes(st.phase)){
       ctx.fillStyle='#101b32dd';ctx.fillRect(45,330,450,280);
-      text(st.phase==='ready'?'몸으로 도전!':st.phase==='won'?'도전 성공!':st.phase==='lost'?'게임 오버!':s.mode==='timeattack'?'최종 기록!':'시간 끝!',270,415,38,s.color);
+      text(st.phase==='ready'?'준비됐나요?':st.phase==='won'?'도전 성공!':st.phase==='lost'?'게임 오버!':s.mode==='timeattack'?'최종 기록!':'시간 끝!',270,415,38,s.color);
       text(st.phase==='ready'?'도전 시작을 눌러요':`${st.score}${toy==='catch'?'개':'번'} · ${st.elapsed.toFixed(1)}초`,270,480,25);
       text(st.phase==='ready'?'카메라 또는 연습 슬라이더로 조종':st.phase==='lost'?'장애물에 닿았어요. 다시 도전!':'설정을 바꾸고 다시 해봐요',270,540,20);
     }
