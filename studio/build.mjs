@@ -24,5 +24,6 @@ await cp(new URL('drizzle/',root),new URL('dist/.openai/drizzle/',root),{recursi
 await mkdir(new URL('local-playground/studio/',root),{recursive:true});
 for(const name of ['index.html','style.css','updates.css','app.mjs','model.mjs','server.mjs','local.mjs','README.md','games.mjs','games.css'])await cp(new URL('studio/'+name,root),new URL('local-playground/studio/'+name,root));
 await cp(new URL('challenges/',root),new URL('local-playground/challenges/',root),{recursive:true});
+await cp(new URL('lib/',root),new URL('local-playground/lib/',root),{recursive:true});
 await cp(new URL('drizzle/',root),new URL('local-playground/studio/drizzle/',root),{recursive:true});
 console.log('Studio Worker, existing lesson, and local standalone lesson ready.');

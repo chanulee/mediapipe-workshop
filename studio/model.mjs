@@ -2,6 +2,7 @@ import { toys as originalToys } from '../kids/catalog.mjs';
 import { gameToys, gameOutputs } from './games.mjs';
 import { sources, pointers, mappedValue } from '../kids/inputs.mjs';
 export const toys={...originalToys,...gameToys};
+export const imageKeys=['image','foodImage','coverImage'];
 
 export const outputs = { reaction:'장난감의 반응', ...gameOutputs };
 export const allowedOutputs=toy=>Object.fromEntries(Object.entries(outputs).filter(([key])=>Object.hasOwn(gameToys,toy)?key!=='reaction'&&(toy==='catch'||!['moveX','moveY'].includes(key)):!['moveX','moveY'].includes(key)));
@@ -22,7 +23,7 @@ export function fromPreset(index=0) {
   const settings={...toys[toy].defaults};
   if(toy==='outline') settings.pointer='nose';
   if(toy==='stretch') settings.placement='center';
-  return {toy,settings,connections:[newConnection(source,output)],title:'',instruction:'',image:null};
+  return {toy,settings,connections:[newConnection(source,output)],title:'',instruction:'',image:null,foodImage:null,coverImage:null};
 }
 export function normalize(raw) {
   if(!raw || !Object.hasOwn(toys,raw.toy)) throw new Error('장난감을 다시 골라주세요.');
@@ -52,7 +53,7 @@ export function normalize(raw) {
   if(!connections.length || new Set(connections.map(c=>c.output)).size!==connections.length) throw new Error('서로 다른 반응을 연결해주세요.');
   const required=toy==='catch'?['moveX','moveY']:toy==='fit'?['size']:[];
   if(required.some(output=>!connections.some(c=>c.output===output)))throw new Error('이 챌린지의 기본 조종 연결을 유지해주세요.');
-  return {toy,settings,connections,title:String(raw.title||'').trim().slice(0,40),instruction:String(raw.instruction||'').trim().slice(0,160),image:typeof raw.image==='string'&&/^[a-f\d-]{36}$/.test(raw.image)?raw.image:null};
+  return {toy,settings,connections,title:String(raw.title||'').trim().slice(0,40),instruction:String(raw.instruction||'').trim().slice(0,160),...Object.fromEntries(imageKeys.map(key=>[key,typeof raw[key]==='string'&&/^[a-f\d-]{36}$/.test(raw[key])?raw[key]:null]))};
 }
 export function advanceValue(previous,input,c,dt=1) {
   const target=mappedValue(input,c);

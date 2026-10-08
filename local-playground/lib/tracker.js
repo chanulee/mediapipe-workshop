@@ -73,7 +73,7 @@ export class Tracker {
     const constraints = {
       video: this.opts.deviceId
         ? { deviceId: { exact: this.opts.deviceId } }
-        : { width: 1280, height: 720 },
+        : { width: 1280, height: 720, ...(this.opts.facingMode ? { facingMode: { ideal: this.opts.facingMode } } : {}) },
       audio: false,
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);

@@ -1,4 +1,4 @@
-import { normalize, fromPreset, sentence } from './model.mjs';
+import { normalize, fromPreset, sentence, imageKeys } from './model.mjs';
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -12,6 +12,8 @@ async function body(req) {
 }
 const clean=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
 const projectOf=value=>{try{return normalize(value);}catch(error){fail(error.message);}};
+// Keep new image slots when a student saves from a tab opened before this update.
+const updatedProject=(value,work)=>projectOf({...Object.fromEntries(imageKeys.slice(1).map(key=>[key,JSON.parse(work.draft)[key]||null])),...value});
 const owns=async(req,work)=>{const value=auth(req)&&await hash(auth(req));return !!value&&(value===work.owner_hash||value===work.access_hash);};
 export async function api(req,env) {
   try {
@@ -42,7 +44,7 @@ export async function api(req,env) {
     if(parts.length===4 && method==='GET') {
       const deleted=url.searchParams.get('deleted')==='1';if(deleted&&!teacher)fail('선생님만 휴지통을 볼 수 있어요.',403);
       const rows=await env.DB.prepare(`SELECT id,name,draft,published,updated_at FROM studio_works WHERE room_id=? AND deleted_at IS ${deleted?'NOT ':''}NULL ORDER BY updated_at DESC`).bind(room.id).all();
-      return json({works:rows.results.filter(r=>teacher||r.published).map(r=>{const p=JSON.parse(teacher?r.draft:r.published);return {id:r.id,name:r.name,title:p.title||`${r.name}의 놀이`,toy:p.toy,connections:sentence(p),published:!!r.published,updatedAt:r.updated_at};})});
+      return json({works:rows.results.filter(r=>teacher||r.published).map(r=>{const p=JSON.parse(teacher?r.draft:r.published);return {id:r.id,name:r.name,title:p.title||`${r.name}의 놀이`,toy:p.toy,connections:sentence(p),coverImage:!deleted&&r.published?JSON.parse(r.published).coverImage||null:null,published:!!r.published,updatedAt:r.updated_at};})});
     }
     const work=await one('SELECT * FROM studio_works WHERE id=? AND room_id=?',parts[4],room.id);if(!work)fail('작품을 찾지 못했어요.',404);
     if(parts[5]==='restore' && method==='POST') {
@@ -70,8 +72,9 @@ export async function api(req,env) {
       }
       if(method==='GET') {
         const id=parts[6],draft=JSON.parse(work.draft),published=work.published&&JSON.parse(work.published);
-        if(id!==published?.image && !(teacher||owner)&&id===draft.image)fail('아직 공개하지 않은 그림이에요.',403);
-        if(id!==draft.image&&id!==published?.image)fail('그림을 찾지 못했어요.',404);
+        const inDraft=imageKeys.some(key=>draft[key]===id),inPublished=imageKeys.some(key=>published?.[key]===id);
+        if(!inPublished && !(teacher||owner)&&inDraft)fail('아직 공개하지 않은 그림이에요.',403);
+        if(!inDraft&&!inPublished)fail('그림을 찾지 못했어요.',404);
         const asset=await env.BUCKET?.get(`${room.id}/${work.id}/${id}`);if(!asset)fail('그림을 찾지 못했어요.',404);
         return new Response(asset.body,{headers:{'Content-Type':asset.httpMetadata?.contentType||'image/jpeg','Cache-Control':'private, max-age=60','X-Content-Type-Options':'nosniff'}});
       }
@@ -88,7 +91,7 @@ export async function api(req,env) {
     }
     if(parts[5]==='publish' && method==='POST') {
       if(!owner)fail('내 작품에서 공개해주세요.',403);
-      const b=await body(req);const p=projectOf(b.project);
+      const b=await body(req);const p=updatedProject(b.project,work);
       if(!p.title||!p.instruction)fail('놀이 이름과 친구에게 알려줄 말을 적어주세요.');
       await run('UPDATE studio_works SET draft=?,published=?,updated_at=? WHERE id=?',JSON.stringify(p),JSON.stringify(p),Date.now(),work.id);return json({ok:true});
     }
@@ -98,7 +101,7 @@ export async function api(req,env) {
     }
     if(parts.length===5 && method==='PUT') {
       if(!owner)fail('내 작품만 바꿀 수 있어요.',403);
-      const p=projectOf((await body(req)).project);
+      const p=updatedProject((await body(req)).project,work);
       await run('UPDATE studio_works SET draft=?,updated_at=? WHERE id=?',JSON.stringify(p),Date.now(),work.id);return json({ok:true});
     }
     if(parts.length===5 && method==='GET') {

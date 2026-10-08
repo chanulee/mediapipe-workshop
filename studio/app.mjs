@@ -3,7 +3,7 @@ import { sources, pointers, inputValue, inputPoint } from '../kids/inputs.mjs';
 import { createToys } from '../kids/toys.js';
 import { drawVideo, videoFit, toCanvas, clamp } from '../lib/utils.js';
 import { setupCapture } from '../kids/recorder.js';
-import { toys, allowedOutputs, presets as studioPresets, fromPreset as studioPreset, normalize, newConnection, advanceValue, sentence } from './model.mjs';
+import { toys, allowedOutputs, presets as studioPresets, fromPreset as studioPreset, normalize, newConnection, advanceValue, sentence, imageKeys } from './model.mjs';
 import { gameToys, gamePresets, gamePreset, gameRule, createGameRenderer } from './games.mjs';
 
 const challengeMode=location.pathname.includes('/challenges/'),presets=challengeMode?gamePresets:studioPresets,fromPreset=challengeMode?gamePreset:studioPreset;
@@ -19,6 +19,21 @@ document.querySelector('.connections-section').before(rulesPanel);
 const gameStyle=document.createElement('link');gameStyle.rel='stylesheet';gameStyle.href=new URL('./games.css',import.meta.url);document.head.append(gameStyle);
 const params=new URLSearchParams(location.search), roomId=params.get('room');
 let teacherToken='', identity=null, project=fromPreset(), image=null, localImage=null, localName='', viewing=null, room=null, mode='welcome';
+let extraImages={},localImages={},imageKey='image',assetGeneration=0;
+function imageData(img){if(!img)return null;const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);return c.toDataURL('image/webp',.8);}
+const imageSlot=document.createElement('label');imageSlot.className='control';imageSlot.textContent='어디에 넣을 그림인가요?';
+const imageSelect=document.createElement('select');imageSelect.setAttribute('aria-label','이미지 자리');imageSlot.append(imageSelect);$('image-control').prepend(imageSlot);
+const appliedImage=document.createElement('img');appliedImage.className='applied-image';appliedImage.alt='현재 적용한 이미지';appliedImage.hidden=true;imageSlot.after(appliedImage);
+function slotImage(key=imageKey){return key==='image'?image:extraImages[key];}
+function slotLocal(key=imageKey){return key==='image'?localImage:localImages[key];}
+function setSlot(key,img,local){if(key==='image'){image=img;localImage=local;}else{extraImages[key]=img;localImages[key]=local;}}
+function imagePanel(){
+  imageSelect.replaceChildren();for(const [key,label]of Object.entries(isGame()?{image:'조종 캐릭터 (커서)',...(project.toy==='catch'?{foodImage:'먹이 (별)'}:{}),coverImage:'세계관 대표 이미지 · 배경'}:{image:'내 그림'})){const o=document.createElement('option');o.value=key;o.textContent=label;imageSelect.append(o);}
+  if(![...imageSelect.options].some(o=>o.value===imageKey))imageKey='image';imageSelect.value=imageKey;
+  const img=slotImage();appliedImage.hidden=!img;if(img)appliedImage.src=imageData(img);
+  $('remove-image').hidden=!project[imageKey]&&!slotLocal()&&!pendingImage;
+}
+imageSelect.onchange=()=>{imageKey=imageSelect.value;imageGeneration++;pendingImage=null;$('pending-image').hidden=true;$('image').value='';$('image-status').textContent='';imagePanel();};
 let tracker=null, video=null, face=null, hands=[], demo=true, cameraGeneration=0, cameraBusy=false;
 let mouse={x:.5,y:.5}, values=[.25,.25], demoValues=[.25,.25], last=0, saveTimer, revision=0, savedRevision=0, savePromise=null, imageGeneration=0, selectedPreset=0, pendingImage=null, trash=false;
 const storageKey=`${challengeMode?'body-challenge':'body-play'}:${roomId||'solo'}`;
@@ -44,7 +59,7 @@ function changed() {
   clearTimeout(saveTimer);if(roomId)saveTimer=setTimeout(()=>save(),700);
   $('connection-sentence').textContent=sentence(project);
 }
-function persist(){write(storageKey,{identity,name:localName,project,localImage,revision,savedRevision});}
+function persist(){write(storageKey,{identity,name:localName,project,localImage,localImages,revision,savedRevision});}
 async function save() {
   if(!roomId||!identity||viewing)return;
   if(savePromise)return savePromise;
@@ -98,6 +113,7 @@ function renderConnections() {
 function panel() {
   renderConnections();renderGameRules();$('title').value=project.title;$('instruction').value=project.instruction;
   $('image-control').hidden=project.toy!=='stretch'&&!isGame();$('audio').hidden=project.toy!=='music';$('audio').textContent='♪ 소리 켜기';
+  imagePanel();
   document.body.classList.toggle('game-stage',isGame());canvas.width=isGame()?540:960;canvas.height=isGame()?960:720;
   if($('game-actions'))$('game-actions').hidden=!isGame();
   if(isGame())$('start-game').dataset.phase='';
@@ -107,11 +123,14 @@ function panel() {
   controls($('extra-controls'),[...(!isGame()?[{key:'pointer',label:'작품이 따라갈 위치',type:'select',options:pointers}]:[]),{key:'hand',label:'사용할 손',type:'select',options:{auto:'자동',Left:'왼손',Right:'오른손'}},...toys[project.toy].controls.filter(s=>!s.rule&&!common.some(c=>c.key===s.key)&&s.key!=='effect'),...sceneControls.filter(s=>!['color','background'].includes(s.key)&&(!isGame()||s.key!=='guides'))]);
   for(const [i,button]of [...$('presets').children].entries())button.setAttribute('aria-pressed',String(i===selectedPreset));
 }
-function loadProject(p,{local=null}={}) {
+function loadProject(p,{local=null,extras={}}={}) {
   capture.stop();renderer.mute();renderer.clear();project=normalize(p);if(isGame())game.engine.reset(project.settings);selectedPreset=presets.findIndex(p=>p[0]===project.toy&&p[2]===project.connections[0].source&&p[3]===project.connections[0].output);if(selectedPreset<0)selectedPreset=Math.max(0,presets.findIndex(p=>p[0]===project.toy));values=[.5,.5];image=null;localImage=local;imageGeneration++;pendingImage=null;$('pending-image').hidden=true;$('image-status').textContent='';$('image').value='';$('remove-image').hidden=!project.image&&!local;panel();
-  const generation=imageGeneration;
-  if(local) {const img=new Image();img.onload=()=>{if(generation===imageGeneration)image=img;};img.src=local;}
-  else if(project.image&&roomId){const workId=viewing?.id||identity?.id;fetch(`${base()}/${workId}/image/${project.image}`,{headers:activeToken()?{Authorization:`Bearer ${activeToken()}`}:{}}).then(r=>{if(!r.ok)throw Error('그림을 불러오지 못했어요.');return r.blob();}).then(blob=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);if(generation===imageGeneration)image=img;};img.onerror=()=>URL.revokeObjectURL(url);img.src=url;}).catch(e=>$('image-status').textContent=e.message);}
+  extraImages={};localImages={...extras};imagePanel();const generation=++assetGeneration;
+  for(const key of imageKeys){const local=slotLocal(key),assetId=project[key];
+    const load=src=>{const img=new Image();img.onload=()=>{if(generation===assetGeneration&&(slotLocal(key)===local||(project[key]&&!slotLocal(key)&&!slotImage(key)))){setSlot(key,img,slotLocal(key));imagePanel();}};img.src=src;};
+    if(local)load(local);
+    else if(assetId&&roomId){const workId=viewing?.id||identity?.id;fetch(`${base()}/${workId}/image/${assetId}`,{headers:activeToken()?{Authorization:`Bearer ${activeToken()}`}:{}}).then(r=>{if(!r.ok)throw Error('그림을 불러오지 못했어요.');return r.blob();}).then(async blob=>{const url=URL.createObjectURL(blob),img=new Image();try{img.src=url;await img.decode();if(generation===assetGeneration&&project[key]===assetId){setSlot(key,img,null);imagePanel();}}finally{URL.revokeObjectURL(url);}}).catch(e=>{if(generation===assetGeneration)$('image-status').textContent=e.message;});}
+  }
 }
 function editing() {
   const url=new URL(location.href);url.searchParams.delete('work');history.replaceState(null,'',url.pathname+url.search);
@@ -125,7 +144,7 @@ function playView() {
   $('workspace-label').textContent=viewing?`${viewing.name}의 놀이 · 내 몸으로 해보기`:'플레이 중';$('workspace-title').textContent=project.title||'내 몸 놀이';
   $('notes').hidden=true;$('feedback-box').hidden=!viewing||(!teacherToken&&!identity);$('feedback-label').textContent=teacherToken?'학생에게 알려줄 말':'해보고 어떤 점이 좋거나 헷갈렸나요?';show('workspace');
 }
-presets.forEach((preset,i)=>{const b=document.createElement('button');b.textContent=preset[1];b.onclick=async()=>{if(viewing)return;const prior=fromPreset(selectedPreset),next=fromPreset(i);selectedPreset=i;const old={title:challengeMode&&project.title===prior.title?next.title:project.title,instruction:challengeMode&&project.instruction===prior.instruction?next.instruction:project.instruction,image:project.image};const oldImage=image,oldLocal=localImage;loadProject({...next,...old},{local:oldLocal});image=oldImage;changed();};$('presets').append(b);});
+presets.forEach((preset,i)=>{const b=document.createElement('button');b.textContent=preset[1];b.onclick=async()=>{if(viewing)return;const prior=fromPreset(selectedPreset),next=fromPreset(i);selectedPreset=i;const old={title:challengeMode&&project.title===prior.title?next.title:project.title,instruction:challengeMode&&project.instruction===prior.instruction?next.instruction:project.instruction,...Object.fromEntries(imageKeys.map(k=>[k,project[k]]))};const oldImage=image,oldLocal=localImage,oldExtra=extraImages;loadProject({...next,...old},{local:oldLocal,extras:localImages});image=oldImage;extraImages=oldExtra;imagePanel();changed();};$('presets').append(b);});
 $('add-connection').onclick=()=>{if(project.connections.length>=(isGame()?4:2))return;const output=Object.keys(allowedOutputs(project.toy)).find(k=>!project.connections.some(c=>c.output===k)&&k!=='reaction');project.connections.push(newConnection('tilt',output));renderConnections();changed();};
 $('title').oninput=()=>{project.title=$('title').value;changed();};$('instruction').oninput=()=>{project.instruction=$('instruction').value;changed();};
 $('reset').onclick=()=>{if(!confirm('현재 놀이를 처음 설정으로 돌릴까요?'))return;loadProject(fromPreset(selectedPreset));changed();};
@@ -135,9 +154,9 @@ $('join').onsubmit=async e=>{
   try{
     const cached=read(storageKey);
     if(roomId){if(!identity){identity=await request(base(),{method:'POST',data:{name:localName,project:fromPreset()},token:''});persist();}const w=await request(`${base()}/${identity.id}`,{token:identity.secret});localName=w.name;
-      if(cached?.identity?.id===identity.id && cached.revision>cached.savedRevision){loadProject(cached.project,{local:cached.localImage});revision=cached.revision;savedRevision=cached.savedRevision;}
+      if(cached?.identity?.id===identity.id && cached.revision>cached.savedRevision){loadProject(cached.project,{local:cached.localImage,extras:cached.localImages});revision=cached.revision;savedRevision=cached.savedRevision;}
       else{loadProject(w.project);revision=0;savedRevision=0;}renderNotes(w.feedback);
-    }else{loadProject(cached?.project||fromPreset(),{local:cached?.localImage});}
+    }else{loadProject(cached?.project||fromPreset(),{local:cached?.localImage,extras:cached?.localImages});}
     editing();persist();if(revision>savedRevision)save();
   }catch(e){$('entry-status').textContent=e.message;}finally{$('join-button').disabled=false;}
 };
@@ -155,7 +174,9 @@ async function list(teacher=false) {
       const button=(name,action)=>{const b=document.createElement('button');b.textContent=name;b.onclick=action;card.append(b);return b;};
       if(deleted)button('복원',async()=>{try{await request(`${base()}/${w.id}/restore`,{method:'POST',data:{}});list(true);}catch(e){status.textContent=e.message;}});
       else {
+        if(w.coverImage){const cover=document.createElement('img');cover.className='work-cover';cover.alt='세계관 대표 이미지';cover.loading='lazy';cover.src=`${base()}/${w.id}/image/${w.coverImage}`;card.prepend(cover);}
         button(teacher?'작품 열기':'플레이하기',()=>{if(Object.hasOwn(gameToys,w.toy)!==challengeMode){location.href=`../${Object.hasOwn(gameToys,w.toy)?'challenges':'studio'}/?room=${roomId}&work=${w.id}`;return;}openWork(w.id,!teacher);});
+        if(w.published)button('링크 복사',async()=>{await copyWorkLink(w,card,status);});
         if(teacher){
           if(w.published)button('공개된 작품 보기',()=>openWork(w.id,true));
           button('학생 재입장 링크',async()=>{try{const entry=await request(`${base()}/${w.id}/student-link`,{method:'POST',data:{}});const link=`${location.origin}/${Object.hasOwn(gameToys,w.toy)?'challenges':'studio'}/?room=${roomId}&role=student#student=${entry.id}&key=${entry.secret}`;
@@ -170,13 +191,14 @@ async function openWork(id,published=false){
   const prior=mode;try{if(identity&&!viewing)await save();const w=await request(`${base()}/${id}${published?'?published=1':''}`,{token:teacherToken||(id===identity?.id?identity.secret:'')});viewing={id:w.id,name:w.name};loadProject(w.project);playView();if(isGame()){const url=new URL(location.href);url.searchParams.set('work',w.id);history.replaceState(null,'',url.pathname+url.search);}$('feedback-status').textContent='';$('feedback-message').value='';}catch(e){$(prior==='classroom'?'class-status':prior==='welcome'?'entry-status':'friends-status').textContent=e.message;}
 }
 $('gallery').onclick=async()=>{if(identity&&!viewing)await save();show('friends');list();};$('refresh-friends').onclick=()=>list();$('refresh-class').onclick=()=>list(true);
-$('home').onclick=async()=>{const url=new URL(location.href);url.searchParams.delete('work');history.replaceState(null,'',url.pathname+url.search);if(teacherToken){viewing=null;show('classroom');list(true);}else{viewing=null;if(roomId&&!identity){show('welcome');return;}const cached=read(storageKey);loadProject(cached?.project||fromPreset(),{local:cached?.localImage});editing();}};
+$('home').onclick=async()=>{const url=new URL(location.href);url.searchParams.delete('work');history.replaceState(null,'',url.pathname+url.search);if(teacherToken){viewing=null;show('classroom');list(true);}else{viewing=null;if(roomId&&!identity){show('welcome');return;}const cached=read(storageKey);loadProject(cached?.project||fromPreset(),{local:cached?.localImage,extras:cached?.localImages});editing();}};
 $('feedback-form').onsubmit=async e=>{e.preventDefault();if(!viewing)return;const b=e.submitter;b.disabled=true;try{await request(`${base()}/${viewing.id}/feedback`,{method:'POST',data:{message:$('feedback-message').value,from:identity?.id}});$('feedback-message').value='';$('feedback-status').textContent='✓ 한마디를 보냈어요.';}catch(e){$('feedback-status').textContent=e.message;}finally{b.disabled=false;}};
 async function copy(id){try{await navigator.clipboard.writeText($(id).value);$('class-status').textContent='링크를 복사했어요.';}catch{$(id).select();$('class-status').textContent='링크를 선택했어요. 복사해서 보내주세요.';}}
 $('copy-student').onclick=()=>copy('student-link');$('copy-teacher').onclick=()=>copy('teacher-link');
 $('copy-reentry').onclick=()=>copy('reentry-link');
 $('start-game').onclick=()=>{game.engine.start(project.settings);$('game-status').textContent='3, 2, 1… 도전!';};
-$('copy-challenge').onclick=async()=>{try{if(!roomId)throw Error('함께하는 수업에서 친구 챌린지에 올린 뒤 링크를 복사해요.');const id=viewing?.id||identity?.id;if(!id)throw Error('먼저 챌린지를 골라주세요.');const w=await request(`${base()}/${id}`,{token:''});if(!w.published)throw Error('먼저 친구 챌린지에 올려주세요.');const url=`${location.origin}/challenges/?room=${roomId}&work=${id}`;await navigator.clipboard.writeText(url);$('game-status').textContent='✓ 챌린지 링크를 복사했어요. 친구도 자기 몸으로 도전할 수 있어요.';}catch(e){$('game-status').textContent=e.message;}};
+async function copyWorkLink(w,host,status){const url=`${location.origin}/${Object.hasOwn(gameToys,w.toy||w.project?.toy)?'challenges':'studio'}/?room=${roomId}&work=${w.id}`;let input=host.querySelector('.share-link');if(!input){input=document.createElement('input');input.className='share-link';input.readOnly=true;input.setAttribute('aria-label','공유할 작품 링크');host.append(input);}input.value=url;try{await navigator.clipboard.writeText(url);status.textContent='✓ 링크를 복사했어요. 로그인 없이 플레이할 수 있어요.';}catch{input.focus();input.select();status.textContent='아래 링크를 길게 누르거나 선택해서 복사해주세요.';}}
+$('copy-challenge').onclick=async()=>{try{if(!roomId)throw Error('함께하는 수업에서 친구 챌린지에 올린 뒤 링크를 복사해요.');const id=viewing?.id||identity?.id;if(!id)throw Error('먼저 챌린지를 골라주세요.');const w=await request(`${base()}/${id}`,{token:''});if(!w.published)throw Error('먼저 친구 챌린지에 올려주세요.');await copyWorkLink(w,gameActions,$('game-status'));}catch(e){$('game-status').textContent=e.message;}};
 $('trash-toggle').onclick=()=>{trash=!trash;$('trash-toggle').textContent=trash?'학생 목록으로':'휴지통';$('reentry').hidden=true;list(true);};
 async function imageFile(file){
   if(!file||!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>10000000)throw Error('10MB 이하 PNG, JPG, WebP, GIF 그림을 골라주세요.');
@@ -192,17 +214,18 @@ $('apply-image').onclick=async()=>{
   if(!pendingImage)return;const generation=imageGeneration,{canvas:c,blob}=pendingImage;$('apply-image').disabled=true;$('image-status').textContent='이미지를 적용하고 있어요…';
   try{
     let id=null;if(roomId){const data=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});id=data.image;}if(generation!==imageGeneration)return;
-    project.image=id;image=c;localImage=roomId?null:c.toDataURL('image/webp',.8);pendingImage=null;$('pending-image').hidden=true;$('remove-image').hidden=false;changed();$('image-status').textContent='✓ 이미지를 적용했어요.';
+    project[imageKey]=id;setSlot(imageKey,c,roomId?null:c.toDataURL('image/webp',.8));pendingImage=null;$('pending-image').hidden=true;imagePanel();changed();$('image-status').textContent='✓ 이미지를 적용했어요.';
   }catch(e){$('image-status').textContent=e.message||'이미지를 적용하지 못했어요. 다시 눌러주세요.';}finally{$('apply-image').disabled=false;}
 };
-$('remove-image').onclick=()=>{imageGeneration++;image=null;localImage=null;project.image=null;pendingImage=null;$('pending-image').hidden=true;$('remove-image').hidden=true;$('image').value='';changed();$('image-status').textContent='✓ 업로드한 이미지를 작품에서 삭제했어요.';};
+$('remove-image').onclick=()=>{imageGeneration++;setSlot(imageKey,null,null);project[imageKey]=null;pendingImage=null;$('pending-image').hidden=true;$('image').value='';imagePanel();changed();$('image-status').textContent='✓ 선택한 자리의 이미지를 삭제했어요.';};
 $('export').onclick=async()=>{
-  const data={version:1,project,localImage:localImage|| (image?(()=>{const c=document.createElement('canvas');c.width=image.width;c.height=image.height;c.getContext('2d').drawImage(image,0,0);return c.toDataURL('image/webp',.8);})():null)};
+  const data={version:2,project,localImage:localImage||imageData(image),localImages:Object.fromEntries(imageKeys.slice(1).map(k=>[k,slotLocal(k)||imageData(slotImage(k))]))};
   const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=(project.title||'내-몸-놀이')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-$('import').onchange=async()=>{try{const f=$('import').files[0];if(!f||f.size>500000)throw Error('500KB 이하 놀이 파일을 골라주세요.');const data=JSON.parse(await f.text()),p=normalize(data.project);p.image=null;
-    if(data.localImage&&!/^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(data.localImage))throw Error('그림 형식을 읽지 못했어요.');
-    loadProject(p,{local:data.localImage});changed();if(roomId&&data.localImage){const blob=await(await fetch(data.localImage)).blob();const response=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});project.image=response.image;localImage=null;changed();}
+$('import').onchange=async()=>{try{const f=$('import').files[0];if(!f||f.size>1500000)throw Error('1.5MB 이하 놀이 파일을 골라주세요.');const data=JSON.parse(await f.text()),p=normalize(data.project),locals={image:data.localImage,...Object.fromEntries(imageKeys.slice(1).map(k=>[k,data.localImages?.[k]]))};
+    for(const key of imageKeys){p[key]=null;if(locals[key]&&(typeof locals[key]!=='string'||!/^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(locals[key])))throw Error('그림 형식을 읽지 못했어요.');}
+    loadProject(p,{local:locals.image,extras:{foodImage:locals.foodImage,coverImage:locals.coverImage}});changed();const generation=assetGeneration;
+    if(roomId)for(const key of imageKeys){if(!locals[key])continue;const blob=await(await fetch(locals[key])).blob();const response=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});if(generation!==assetGeneration)return;project[key]=response.image;if(key==='image')localImage=null;else localImages[key]=null;changed();}
   }catch(e){$('save-state').textContent=e.message||'놀이 파일을 읽지 못했어요.';}};
 
 function stopCamera(){cameraGeneration++;tracker?.stop();tracker=null;video=null;face=null;hands=[];cameraBusy=false;$('camera').disabled=false;}
@@ -210,7 +233,7 @@ async function startCamera(){
   if(cameraBusy)return;stopCamera();const generation=cameraGeneration;cameraBusy=true;$('camera').disabled=true;$('camera-status').textContent='카메라를 준비하고 있어요. 권한 창에서 허용해주세요.';let candidate;
   const timer=setTimeout(()=>{if(generation!==cameraGeneration)return;stopCamera();candidate?.stop();$('camera-status').textContent='준비가 오래 걸려요. 권한을 확인하고 다시 켜거나 손 없이 해보세요.';},30000);
   try{if(!navigator.mediaDevices?.getUserMedia)throw Error();const {Tracker}=await import('../lib/tracker.js');if(generation!==cameraGeneration)return;
-    candidate=new Tracker({face:true,hands:true,maxHands:2,smoothing:.25});candidate.onUpdate(data=>{if(generation!==cameraGeneration)return;({face,hands,video}=data);});await candidate.start();
+    candidate=new Tracker({face:true,hands:true,maxHands:2,smoothing:.25,facingMode:'user'});candidate.onUpdate(data=>{if(generation!==cameraGeneration)return;({face,hands,video}=data);});await candidate.start();
     if(generation!==cameraGeneration){candidate.stop();return;}tracker=candidate;video=candidate.video;demo=false;$('demo-panel').hidden=true;$('live-mode').textContent='카메라로 움직이는 중';$('camera-status').textContent='';
     video.srcObject.getVideoTracks()[0].addEventListener('ended',()=>{if(tracker!==candidate)return;stopCamera();demo=true;$('demo-panel').hidden=false;$('camera-status').textContent='카메라 연결이 끊겼어요. 다시 켜주세요.';});
   }catch{candidate?.stop();if(generation===cameraGeneration){stopCamera();demo=true;$('demo-panel').hidden=false;$('camera-status').textContent='카메라가 아직 켜지지 않았어요. 주소 옆 권한을 확인하고 다시 눌러주세요. 손 없이도 계속할 수 있어요.';}}
@@ -226,13 +249,13 @@ window.addEventListener('beforeunload',e=>{if(roomId&&!viewing&&revision>savedRe
 function draw(now){
   // Schedule first so a failed asset or renderer cannot permanently stop camera feedback.
   requestAnimationFrame(draw);if(mode!=='workspace')return;const dt=Math.min(2,Math.max(.1,(now-last)/16.667||1));last=now;
-  ctx.fillStyle=project.settings.background;ctx.fillRect(0,0,canvas.width,canvas.height);drawVideo(video,ctx,canvas.width,canvas.height,{opacity:project.settings.cameraOpacity});
+  ctx.fillStyle=project.settings.background;ctx.fillRect(0,0,canvas.width,canvas.height);if(isGame()&&extraImages.coverImage){const img=extraImages.coverImage,r=Math.max(canvas.width/img.width,canvas.height/img.height);ctx.drawImage(img,(canvas.width-img.width*r)/2,(canvas.height-img.height*r)/2,img.width*r,img.height*r);}drawVideo(video,ctx,canvas.width,canvas.height,{opacity:project.settings.cameraOpacity});
   const fit=videoFit(video,canvas.width,canvas.height),s={...project.settings},inputs=project.connections.map((c,i)=>demo?{valid:true,value:demoValues[i],points:[]}:inputValue(c.source,face,hands,s.hand));
   inputs.forEach((input,i)=>{const c=project.connections[i],v=isGame()&&!demo&&['noseX','noseY','handX','handY'].includes(c.source)?clamp((input.value-.25)*2):input.value;values[i]=advanceValue(values[i],input.valid?v:0,c,dt);$(`meter-${i}`).value=input.valid?input.value*100:0;$(`meter-label-${i}`).textContent=`${sources[c.source]} ${input.valid?Math.round(input.value*100):'—'} → ${Math.round(values[i]*100)}`;});
   const target=inputPoint(demo?'mouse':s.pointer,face,hands,mouse,s.hand),point=target?(demo||s.pointer==='mouse'?{x:target.x*canvas.width,y:target.y*canvas.height}:toCanvas(target,fit)):null;
   if(isGame()){
     const control=Object.fromEntries(project.connections.map((c,i)=>[c.output,['moveX','moveY'].includes(c.output)?.5+(values[i]-.5)*c.amount:values[i]*c.amount]));
-    const state=game.draw(project.toy,s,{controls:control,valid:inputs.every(i=>i.valid),dt:dt/60,now,img:image});
+    const state=game.draw(project.toy,s,{controls:control,valid:inputs.every(i=>i.valid),dt:dt/60,now,img:image,foodImg:extraImages.foodImage});
     const label=`${state.phase}:${state.score}`;
     if($('start-game').dataset.phase!==label){
       $('start-game').dataset.phase=label;$('start-game').textContent=['won','ended'].includes(state.phase)?'↻ 다시 도전':['countdown','playing'].includes(state.phase)?'↻ 처음부터 도전':'▶ 도전 시작';
