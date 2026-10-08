@@ -23,6 +23,12 @@ let teacherToken='', identity=null, project=fromPreset(), image=null, localImage
 let extraImages={},localImages={},assetGeneration=0,shareUntil=0,publishedWork=null;
 const guestIntro=document.createElement('section');guestIntro.className='guest-intro card';guestIntro.hidden=true;guestIntro.innerHTML='<img id="guest-title-image" alt="게임 타이틀" hidden><h2 id="guest-title"></h2><p id="guest-instruction"></p><p id="guest-rule" class="small"></p><button id="guest-start" class="primary">▶ 게임 시작</button><button id="guest-demo">카메라 없이 해보기</button><p id="guest-status" role="status"></p>';document.querySelector('.workbench').before(guestIntro);
 if(challengeMode){document.querySelector('header nav').append($('publish'));document.body.classList.toggle('shared-game',sharedView);}
+if(sharedView){
+  const stage=document.querySelector('.stage-wrap'),settings=document.createElement('details');settings.className='play-settings';settings.innerHTML='<summary aria-label="카메라와 조작 설정">⚙ 설정</summary>';
+  for(const node of [document.querySelector('.stage-top'),$('demo-panel'),document.querySelector('.sensor-strip'),$('tracking'),$('camera-status')])settings.append(node);
+  stage.append(gameActions,settings);$('start-game').textContent='↻ 다시 도전';
+}
+
 function imageData(img){if(!img)return null;const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);return c.toDataURL('image/webp',.8);}
 const imageCards=new Map(),imageGrid=document.createElement('div');imageGrid.className='image-grid';
 const imageHint=document.createElement('p');imageHint.className='small';imageHint.textContent='각 자리에 그림을 골라주세요. 선택하면 바로 적용돼요.';
