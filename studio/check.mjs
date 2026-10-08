@@ -69,5 +69,9 @@ assert.equal((await call(`${base}/${c.id}`,'GET',null,c.secret)).body.project.to
 await call(`${base}/${c.id}/publish`,'POST',{project:challenge},c.secret);
 assert.equal((await call(`${base}/${c.id}`)).body.project.settings.hold,1.5);
 assert.equal((await call(`${base}/${c.id}`,'PUT',{project:challenge},a.secret)).status,403);
+challenge.settings.mode='timeattack';challenge.settings.duration=45;challenge.settings.goal=10;
+await call(`${base}/${c.id}/publish`,'POST',{project:challenge},c.secret);
+const sharedRule=(await call(`${base}/${c.id}`)).body.project.settings;
+assert.equal(sharedRule.mode,'timeattack');assert.equal(sharedRule.duration,45);assert.equal(sharedRule.goal,10);
 console.log('PASS: 7 presets, mapping, owner/teacher permissions, snapshots, images, feedback, student reentry keys, deletion, restore and challenge sharing');
 db.close();

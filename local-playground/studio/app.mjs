@@ -4,7 +4,7 @@ import { createToys } from '../kids/toys.js';
 import { drawVideo, videoFit, toCanvas, clamp } from '../lib/utils.js';
 import { setupCapture } from '../kids/recorder.js';
 import { toys, allowedOutputs, presets as studioPresets, fromPreset as studioPreset, normalize, newConnection, advanceValue, sentence } from './model.mjs';
-import { gameToys, gamePresets, gamePreset, createGameRenderer } from './games.mjs';
+import { gameToys, gamePresets, gamePreset, gameRule, createGameRenderer } from './games.mjs';
 
 const challengeMode=location.pathname.includes('/challenges/'),presets=challengeMode?gamePresets:studioPresets,fromPreset=challengeMode?gamePreset:studioPreset;
 
@@ -12,8 +12,10 @@ const $=id=>document.getElementById(id), canvas=$('stage'), ctx=canvas.getContex
 const game=createGameRenderer(canvas),isGame=()=>Object.hasOwn(gameToys,project.toy);
 const capture=setupCapture(canvas,$('photo'),$('record'),$('capture-status'),$('save-status'),$('download'),renderer.getAudioTracks);
 const gameActions=document.createElement('div');gameActions.id='game-actions';gameActions.hidden=true;gameActions.className='game-actions';
-gameActions.innerHTML='<button id="start-game" class="primary">▶ 도전 시작</button><button id="copy-challenge">챌린지 링크 복사</button><button id="next-challenge">다음 챌린지 ↓</button><p id="game-status" role="status"></p>';
+gameActions.innerHTML='<button id="start-game" class="primary">▶ 도전 시작</button><button id="copy-challenge">챌린지 링크 복사</button><p id="game-status" role="status"></p>';
 document.querySelector('.stage-wrap').before(gameActions);
+const rulesPanel=document.createElement('section');rulesPanel.className='card';rulesPanel.hidden=true;rulesPanel.innerHTML='<div class="number-label"><b>02</b><h2>게임 규칙 정하기</h2></div><p id="rule-summary" class="rule-summary" role="status"></p><div id="rule-controls"></div>';
+document.querySelector('.connections-section').before(rulesPanel);
 const gameStyle=document.createElement('link');gameStyle.rel='stylesheet';gameStyle.href=new URL('./games.css',import.meta.url);document.head.append(gameStyle);
 const params=new URLSearchParams(location.search), roomId=params.get('room');
 let teacherToken='', identity=null, project=fromPreset(), image=null, localImage=null, localName='', viewing=null, room=null, mode='welcome';
@@ -37,7 +39,7 @@ function show(next) {
 }
 function changed() {
   if(viewing)return;
-  if(isGame())game.engine.reset(project.settings);
+  if(isGame()){game.engine.reset(project.settings);$('start-game').dataset.phase='';$('rule-summary').textContent=gameRule(project.toy,project.settings);if(project.instruction==='움직여서 별 5개를 모아봐!'){project.instruction='움직여서 별을 모아봐!';$('instruction').value=project.instruction;}}
   revision++;persist();$('save-state').textContent=roomId?'저장할 변경이 있어요…':'이 브라우저에 저장했어요';
   clearTimeout(saveTimer);if(roomId)saveTimer=setTimeout(()=>save(),700);
   $('connection-sentence').textContent=sentence(project);
@@ -64,10 +66,16 @@ function selectRow(label,options,value,change) {const row=document.createElement
 function controls(host,specs) {
   host.replaceChildren();for(const spec of specs){let row;
     if(spec.type==='range')row=range(spec.label,project.settings[spec.key],spec.min,spec.max,spec.step,v=>{project.settings[spec.key]=v;changed();});
-    else if(spec.type==='select')row=selectRow(spec.label,spec.options,project.settings[spec.key],v=>{project.settings[spec.key]=v;renderer.release();changed();});
-    else {row=document.createElement('label');row.textContent=spec.label;const el=document.createElement('input');el.type=spec.type;el.maxLength=24;if(spec.type==='checkbox')el.checked=project.settings[spec.key];else el.value=project.settings[spec.key];el.oninput=()=>{project.settings[spec.key]=spec.type==='checkbox'?el.checked:el.value;changed();};row.append(el);}
+    else if(spec.type==='select')row=selectRow(spec.label,spec.options,project.settings[spec.key],v=>{project.settings[spec.key]=v;renderer.release();changed();if(spec.rule)renderGameRules();});
+    else {row=document.createElement('label');row.textContent=spec.label;const el=document.createElement('input');el.type=spec.type;el.maxLength=24;if(spec.type==='checkbox')el.checked=project.settings[spec.key];else el.value=project.settings[spec.key];el.oninput=()=>{project.settings[spec.key]=spec.type==='checkbox'?el.checked:el.value;changed();if(spec.rule)renderGameRules();};row.append(el);}
+    if(spec.key==='goal'&&isGame()){const number=document.createElement('input');number.type='number';number.min=spec.min;number.max=spec.max;number.value=project.settings.goal;number.setAttribute('aria-label','목표 개수 직접 입력');number.oninput=()=>{if(number.value==='')return;project.settings.goal=Math.round(clamp(Number(number.value)||1,spec.min,spec.max));number.value=project.settings.goal;row.querySelector('input[type=range]').value=project.settings.goal;row.querySelector('output').textContent=project.settings.goal;changed();};number.onblur=()=>{number.value=project.settings.goal;};row.querySelector('input[type=range]').addEventListener('input',()=>{number.value=project.settings.goal;});row.append(number);}
     row.classList.add('control');host.append(row);
   }
+}
+function renderGameRules(){
+  rulesPanel.hidden=!isGame();if(!isGame())return;
+  const s=project.settings;$('rule-summary').textContent=gameRule(project.toy,s);
+  controls($('rule-controls'),toys[project.toy].controls.filter(c=>c.rule&&(c.key!=='goal'||s.mode!=='timeattack')&&(c.key!=='timeLimit'||s.mode!=='timeattack')&&(c.key!=='duration'||s.mode==='timeattack'||s.timeLimit)));
 }
 function renderConnections() {
   $('connections').replaceChildren();$('demo-inputs').replaceChildren();$('meters').replaceChildren();
@@ -88,14 +96,15 @@ function renderConnections() {
   $('add-connection').hidden=project.connections.length>=(isGame()?4:2);$('connection-sentence').textContent=sentence(project);
 }
 function panel() {
-  renderConnections();$('title').value=project.title;$('instruction').value=project.instruction;
+  renderConnections();renderGameRules();$('title').value=project.title;$('instruction').value=project.instruction;
   $('image-control').hidden=project.toy!=='stretch'&&!isGame();$('audio').hidden=project.toy!=='music';$('audio').textContent='♪ 소리 켜기';
   document.body.classList.toggle('game-stage',isGame());canvas.width=isGame()?540:960;canvas.height=isGame()?960:720;
   if($('game-actions'))$('game-actions').hidden=!isGame();
+  if(isGame())$('start-game').dataset.phase='';
   $('preset-hint').textContent=toys[project.toy].hint;
-  const common=[...toys[project.toy].controls.filter(s=>isGame()||['text','subtitle','color','behavior','mode','wave','brush'].includes(s.key)),...sceneControls.filter(s=>['color','background'].includes(s.key))];
+  const common=[...toys[project.toy].controls.filter(s=>!s.rule&&(isGame()||['text','subtitle','color','behavior','mode','wave','brush'].includes(s.key))),...sceneControls.filter(s=>['color','background'].includes(s.key))];
   controls($('personal-controls'),common);
-  controls($('extra-controls'),[...(!isGame()?[{key:'pointer',label:'작품이 따라갈 위치',type:'select',options:pointers}]:[]),{key:'hand',label:'사용할 손',type:'select',options:{auto:'자동',Left:'왼손',Right:'오른손'}},...toys[project.toy].controls.filter(s=>!common.some(c=>c.key===s.key)&&s.key!=='effect'),...sceneControls.filter(s=>!['color','background'].includes(s.key)&&(!isGame()||s.key!=='guides'))]);
+  controls($('extra-controls'),[...(!isGame()?[{key:'pointer',label:'작품이 따라갈 위치',type:'select',options:pointers}]:[]),{key:'hand',label:'사용할 손',type:'select',options:{auto:'자동',Left:'왼손',Right:'오른손'}},...toys[project.toy].controls.filter(s=>!s.rule&&!common.some(c=>c.key===s.key)&&s.key!=='effect'),...sceneControls.filter(s=>!['color','background'].includes(s.key)&&(!isGame()||s.key!=='guides'))]);
   for(const [i,button]of [...$('presets').children].entries())button.setAttribute('aria-pressed',String(i===selectedPreset));
 }
 function loadProject(p,{local=null}={}) {
@@ -168,8 +177,6 @@ $('copy-student').onclick=()=>copy('student-link');$('copy-teacher').onclick=()=
 $('copy-reentry').onclick=()=>copy('reentry-link');
 $('start-game').onclick=()=>{game.engine.start(project.settings);$('game-status').textContent='3, 2, 1… 도전!';};
 $('copy-challenge').onclick=async()=>{try{if(!roomId)throw Error('함께하는 수업에서 친구 챌린지에 올린 뒤 링크를 복사해요.');const id=viewing?.id||identity?.id;if(!id)throw Error('먼저 챌린지를 골라주세요.');const w=await request(`${base()}/${id}`,{token:''});if(!w.published)throw Error('먼저 친구 챌린지에 올려주세요.');const url=`${location.origin}/challenges/?room=${roomId}&work=${id}`;await navigator.clipboard.writeText(url);$('game-status').textContent='✓ 챌린지 링크를 복사했어요. 친구도 자기 몸으로 도전할 수 있어요.';}catch(e){$('game-status').textContent=e.message;}};
-$('next-challenge').onclick=async()=>{try{const {works}=await request(base(),{token:''});const games=works.filter(w=>Object.hasOwn(gameToys,w.toy));if(!games.length)throw Error('아직 공개된 챌린지가 없어요.');const index=games.findIndex(w=>w.id===(viewing?.id||identity?.id));await openWork(games[(index+1)%games.length].id,true);}catch(e){$('game-status').textContent=e.message;}};
-if(!roomId)$('next-challenge').hidden=true;
 $('trash-toggle').onclick=()=>{trash=!trash;$('trash-toggle').textContent=trash?'학생 목록으로':'휴지통';$('reentry').hidden=true;list(true);};
 async function imageFile(file){
   if(!file||!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>10000000)throw Error('10MB 이하 PNG, JPG, WebP, GIF 그림을 골라주세요.');
@@ -226,7 +233,13 @@ function draw(now){
   if(isGame()){
     const control=Object.fromEntries(project.connections.map((c,i)=>[c.output,['moveX','moveY'].includes(c.output)?.5+(values[i]-.5)*c.amount:values[i]*c.amount]));
     const state=game.draw(project.toy,s,{controls:control,valid:inputs.every(i=>i.valid),dt:dt/60,now,img:image});
-    const label=`${state.phase}:${state.score}`;if($('start-game').dataset.phase!==label){$('start-game').dataset.phase=label;$('start-game').textContent=['won','ended'].includes(state.phase)?'↻ 다시 도전':['countdown','playing'].includes(state.phase)?'↻ 처음부터 도전':'▶ 도전 시작';if(state.phase==='playing')$('game-status').textContent=`도전 중! ${s.goal}번 성공하면 클리어예요.`;if(state.phase==='ready')$('game-status').textContent='설정을 바꾸고 도전 시작을 눌러요.';if(['won','ended'].includes(state.phase))$('game-status').textContent=`${state.phase==='won'?'성공!':'시간 끝!'} ${state.score}개 · ${state.elapsed.toFixed(1)}초. 다시 도전하거나 친구 챌린지도 해봐요.`;}
+    const label=`${state.phase}:${state.score}`;
+    if($('start-game').dataset.phase!==label){
+      $('start-game').dataset.phase=label;$('start-game').textContent=['won','ended'].includes(state.phase)?'↻ 다시 도전':['countdown','playing'].includes(state.phase)?'↻ 처음부터 도전':'▶ 도전 시작';
+      if(state.phase==='playing')$('game-status').textContent='도전 중! '+gameRule(project.toy,s);
+      if(state.phase==='ready')$('game-status').textContent='준비되면 도전 시작을 눌러요. '+gameRule(project.toy,s);
+      if(['won','ended'].includes(state.phase))$('game-status').textContent=`${state.phase==='won'?'성공!':s.mode==='timeattack'?'최종 기록!':'시간 끝!'} ${state.score}${project.toy==='catch'?'개':'번'} · ${state.elapsed.toFixed(1)}초. 다시 도전해봐요.`;
+    }
     $('sees').textContent=demo?'연습 입력':`손 ${hands.length} / 2 · 얼굴 ${face?'✓':'—'}`;
     $('tracking').textContent=demo?'무대에서 마우스·터치를 움직이거나 연습 슬라이더로 조종해요.':inputs.some(i=>!i.valid)?'선택한 얼굴이나 손을 보여주세요. 찾는 동안 게임 시간이 멈춰요.':'✓ 움직임이 연결됐어요!';return;
   }
