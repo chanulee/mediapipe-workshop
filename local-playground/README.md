@@ -1,5 +1,7 @@
 # MediaPipe Kids Playground — 로컬 실행
 
+다음 차시 교구 **몸 놀이 만들기**는 `studio/` 폴더에 별도로 있습니다. Node.js 22.13 이상에서 `node studio/local.mjs`로 실행하고 `http://127.0.0.1:8080/studio/`를 여세요. 이름별 저장·교사 화면·친구 플레이를 포함한 사용법은 [studio/README.md](studio/README.md)를 참고하세요. 아래 Python 실행 방법은 지난 차시 교구용입니다.
+
 이 폴더만 있으면 Stretch It 튜토리얼과 8개 Explore 장난감을 로컬에서 실행할 수 있습니다. 별도 설치나 빌드는 필요 없고, Python 3와 인터넷 연결이 필요합니다. 인터넷은 처음 카메라를 켤 때 MediaPipe 런타임과 모델을 불러오는 데 사용합니다.
 
 ## 가장 쉬운 실행 방법
@@ -58,4 +60,3 @@ local-playground/
 ```
 
 `local-playground` 폴더 전체를 복사하거나 ZIP으로 전달하면 됩니다. 일부 파일만 빼면 실행되지 않을 수 있습니다.
-

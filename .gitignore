@@ -2,3 +2,5 @@
 .DS_Store
 
 dist/
+.studio-data/
+local-playground/.studio-data/
