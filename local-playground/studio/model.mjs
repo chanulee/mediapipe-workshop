@@ -10,8 +10,6 @@ export const presets = [
   ['music','입으로 연주하기','mouth','reaction'],
   ['text','손으로 글자 밀기','pinchGap','reaction'],
   ['outline','코로 글자 간질이기','mouth','reaction'],
-  ['inspect','점과 숫자로 변신','openness','reaction'],
-  ['flow','움직임의 길 보기','mouth','reaction'],
 ];
 export function newConnection(source='hands', output='size') {
   return { source, output, sensitivity:1, reverse:false, smoothing:.5, amount:.8 };

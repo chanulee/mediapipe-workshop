@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const root=new URL('../',import.meta.url);
 execFileSync(process.execPath,['kids/build.mjs'],{cwd:fileURLToPath(root),stdio:'inherit'});
 await mkdir(new URL('dist/studio/',root),{recursive:true});
-for(const name of ['index.html','style.css','app.mjs','model.mjs'])await cp(new URL('studio/'+name,root),new URL('dist/studio/'+name,root));
+for(const name of ['index.html','style.css','updates.css','app.mjs','model.mjs'])await cp(new URL('studio/'+name,root),new URL('dist/studio/'+name,root));
 const types={html:'text/html; charset=utf-8',css:'text/css; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',ttf:'font/ttf',txt:'text/plain; charset=utf-8',md:'text/plain; charset=utf-8'};
 const assets={};
 async function collect(relative){for(const entry of await readdir(new URL(relative,root),{withFileTypes:true})){const path=relative+'/'+entry.name;if(entry.isDirectory())await collect(path);else{const ext=entry.name.split('.').at(-1);assets['/'+path.slice(5)]=[types[ext]||'application/octet-stream',(await readFile(new URL(path,root))).toString('base64')];}}}
@@ -21,6 +21,6 @@ await cp(new URL('.openai/hosting.json',root),new URL('dist/.openai/hosting.json
 await cp(new URL('drizzle/',root),new URL('dist/.openai/drizzle/',root),{recursive:true});
 // Keep the earlier standalone lesson intact and add this lesson beside it.
 await mkdir(new URL('local-playground/studio/',root),{recursive:true});
-for(const name of ['index.html','style.css','app.mjs','model.mjs','server.mjs','local.mjs','README.md'])await cp(new URL('studio/'+name,root),new URL('local-playground/studio/'+name,root));
+for(const name of ['index.html','style.css','updates.css','app.mjs','model.mjs','server.mjs','local.mjs','README.md'])await cp(new URL('studio/'+name,root),new URL('local-playground/studio/'+name,root));
 await cp(new URL('drizzle/',root),new URL('local-playground/studio/drizzle/',root),{recursive:true});
 console.log('Studio Worker, existing lesson, and local standalone lesson ready.');

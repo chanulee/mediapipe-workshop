@@ -10,7 +10,7 @@ const capture=setupCapture(canvas,$('photo'),$('record'),$('capture-status'),$('
 const params=new URLSearchParams(location.search), roomId=params.get('room');
 let teacherToken='', identity=null, project=fromPreset(), image=null, localImage=null, localName='', viewing=null, room=null, mode='welcome';
 let tracker=null, video=null, face=null, hands=[], demo=true, cameraGeneration=0, cameraBusy=false;
-let mouse={x:.5,y:.5}, values=[.25,.25], demoValues=[.25,.25], last=0, saveTimer, revision=0, savedRevision=0, savePromise=null, imageGeneration=0, selectedPreset=0;
+let mouse={x:.5,y:.5}, values=[.25,.25], demoValues=[.25,.25], last=0, saveTimer, revision=0, savedRevision=0, savePromise=null, imageGeneration=0, selectedPreset=0, pendingImage=null, trash=false;
 const storageKey=`body-play:${roomId||'solo'}`;
 function read(key){try{return JSON.parse(localStorage.getItem(key));}catch{return null;}}
 function write(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{$('save-state').textContent='기기 저장 공간이 부족해요. 놀이 파일로 저장해주세요.';return false;}}
@@ -85,7 +85,7 @@ function panel() {
   for(const [i,button]of [...$('presets').children].entries())button.setAttribute('aria-pressed',String(i===selectedPreset));
 }
 function loadProject(p,{local=null}={}) {
-  capture.stop();renderer.mute();renderer.clear();project=normalize(p);values=[0,0];image=null;localImage=local;imageGeneration++;panel();
+  capture.stop();renderer.mute();renderer.clear();project=normalize(p);values=[0,0];image=null;localImage=local;imageGeneration++;pendingImage=null;$('pending-image').hidden=true;$('image-status').textContent='';$('image').value='';$('remove-image').hidden=!project.image&&!local;panel();
   const generation=imageGeneration;
   if(local) {const img=new Image();img.onload=()=>{if(generation===imageGeneration)image=img;};img.src=local;}
   else if(project.image&&roomId){const workId=viewing?.id||identity?.id;fetch(`${base()}/${workId}/image/${project.image}`,{headers:activeToken()?{Authorization:`Bearer ${activeToken()}`}:{}}).then(r=>{if(!r.ok)throw Error('그림을 불러오지 못했어요.');return r.blob();}).then(blob=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);if(generation===imageGeneration)image=img;};img.onerror=()=>URL.revokeObjectURL(url);img.src=url;}).catch(e=>$('image-status').textContent=e.message);}
@@ -98,7 +98,7 @@ function editing() {
 function playView() {
   capture.stop();document.body.classList.add('playing');$('editor').hidden=true;$('preview').hidden=true;$('publish').hidden=true;$('edit').hidden=!!viewing;$('save-state').hidden=true;
   $('play-instruction').hidden=false;$('play-instruction').textContent=project.instruction||'카메라를 켜고 몸을 움직여보세요. 손 없이도 연습할 수 있어요.';
-  $('workspace-label').textContent=viewing?`${viewing.name}의 놀이 · 내 몸으로 해보기`:'친구에게 보이는 화면';$('workspace-title').textContent=project.title||'이름을 기다리는 놀이';
+  $('workspace-label').textContent=viewing?`${viewing.name}의 놀이 · 내 몸으로 해보기`:'플레이 중';$('workspace-title').textContent=project.title||'내 몸 놀이';
   $('notes').hidden=true;$('feedback-box').hidden=!viewing||(!teacherToken&&!identity);$('feedback-label').textContent=teacherToken?'학생에게 알려줄 말':'해보고 어떤 점이 좋거나 헷갈렸나요?';show('workspace');
 }
 presets.forEach((preset,i)=>{const b=document.createElement('button');b.textContent=preset[1];b.onclick=async()=>{if(viewing)return;selectedPreset=i;const old={title:project.title,instruction:project.instruction,image:project.image};const oldImage=image,oldLocal=localImage;loadProject({...fromPreset(i),...old},{local:oldLocal});image=oldImage;changed();};$('presets').append(b);});
@@ -125,8 +125,21 @@ $('publish').onclick=async()=>{
 function renderNotes(notes){$('notes-list').replaceChildren();if(!notes?.length){$('notes-list').textContent='선생님과 친구의 한마디가 여기에 도착해요.';return;}for(const note of notes){const p=document.createElement('p'),strong=document.createElement('strong');strong.textContent=note.author+' · ';p.append(strong,document.createTextNode(note.message));$('notes-list').append(p);}}
 async function list(teacher=false) {
   const host=$(teacher?'class-list':'friends-list'),status=$(teacher?'class-status':'friends-status');
-  try{const {works}=await request(base(),{token:teacher?teacherToken:''});host.replaceChildren();status.textContent=works.length?`${works.length}개의 ${teacher?'학생 자리':'놀이'} · ${new Date().toLocaleTimeString('ko-KR')} 확인`:teacher?'학생이 들어오면 이곳에 나타나요.':'아직 공개된 놀이가 없어요. 먼저 내 놀이를 만들어보세요.';
-    for(const w of works){const card=document.createElement('article');card.className='card work-card';const badge=document.createElement('span');badge.className='badge';badge.textContent=teacher?(w.published?'친구에게 공개됨':'만드는 중'):w.name+'의 놀이';const title=document.createElement('h2');title.textContent=teacher?w.name:w.title;const text=document.createElement('p');text.textContent=w.connections;const time=document.createElement('time');time.textContent=`최근 저장 ${new Date(w.updatedAt).toLocaleTimeString('ko-KR')}`;const button=document.createElement('button');button.textContent=teacher?'현재 작품 열기':'내 몸으로 해보기 →';button.onclick=()=>openWork(w.id,!teacher);card.append(badge,title,text,time,button);if(teacher&&w.published){const published=document.createElement('button');published.textContent='공개본 보기';published.onclick=()=>openWork(w.id,true);card.append(published);}host.append(card);}
+  const deleted=teacher&&trash;
+  try{const {works}=await request(base()+(deleted?'?deleted=1':''),{token:teacher?teacherToken:''});host.replaceChildren();status.textContent=works.length?`${works.length}개의 ${deleted?'삭제한 작품':teacher?'학생 자리':'놀이'} · ${new Date().toLocaleTimeString('ko-KR')} 확인`:deleted?'휴지통이 비어 있어요.':teacher?'학생이 들어오면 이곳에 나타나요.':'아직 공개된 놀이가 없어요. 먼저 내 놀이를 만들어보세요.';
+    for(const w of works){const card=document.createElement('article');card.className='card work-card';const badge=document.createElement('span');badge.className='badge';badge.textContent=deleted?'삭제됨':teacher?(w.published?'친구 놀이에 올라감':'만드는 중'):w.name+'의 놀이';const title=document.createElement('h2');title.textContent=teacher?w.name:w.title;const text=document.createElement('p');text.textContent=w.connections;const time=document.createElement('time');time.textContent=`최근 저장 ${new Date(w.updatedAt).toLocaleString('ko-KR')}`;card.append(badge,title,text,time);
+      const button=(name,action)=>{const b=document.createElement('button');b.textContent=name;b.onclick=action;card.append(b);return b;};
+      if(deleted)button('복원',async()=>{try{await request(`${base()}/${w.id}/restore`,{method:'POST',data:{}});list(true);}catch(e){status.textContent=e.message;}});
+      else {
+        button(teacher?'작품 열기':'플레이하기',()=>openWork(w.id,!teacher));
+        if(teacher){
+          if(w.published)button('공개된 작품 보기',()=>openWork(w.id,true));
+          button('학생 재입장 링크',async()=>{try{const entry=await request(`${base()}/${w.id}/student-link`,{method:'POST',data:{}});const link=`${location.origin}${location.pathname}?room=${roomId}&role=student#student=${entry.id}&key=${entry.secret}`;
+            $('reentry-link').value=link;$('reentry-name').textContent=`${w.name}에게 보낼 재입장 링크`;$('reentry').hidden=false;try{await navigator.clipboard.writeText(link);$('reentry-status').textContent='복사했어요. 해당 학생에게 보내면 기존 작품으로 바로 들어가요.';}catch{$('reentry-link').select();$('reentry-status').textContent='아래 링크를 복사해 해당 학생에게 보내주세요.';}
+          }catch(e){status.textContent=e.message;}});
+          button('작품 삭제',async()=>{if(!confirm(`${w.name}의 작품을 삭제할까요? 친구 놀이에서도 사라지며 휴지통에서 복원할 수 있어요.`))return;try{await request(`${base()}/${w.id}`,{method:'DELETE'});list(true);}catch(e){status.textContent=e.message;}});
+        }
+      }host.append(card);}
   }catch(e){status.textContent=e.message;}
 }
 async function openWork(id,published=false){
@@ -137,18 +150,26 @@ $('home').onclick=async()=>{if(teacherToken){viewing=null;show('classroom');list
 $('feedback-form').onsubmit=async e=>{e.preventDefault();if(!viewing)return;const b=e.submitter;b.disabled=true;try{await request(`${base()}/${viewing.id}/feedback`,{method:'POST',data:{message:$('feedback-message').value,from:identity?.id}});$('feedback-message').value='';$('feedback-status').textContent='✓ 한마디를 보냈어요.';}catch(e){$('feedback-status').textContent=e.message;}finally{b.disabled=false;}};
 async function copy(id){try{await navigator.clipboard.writeText($(id).value);$('class-status').textContent='링크를 복사했어요.';}catch{$(id).select();$('class-status').textContent='링크를 선택했어요. 복사해서 보내주세요.';}}
 $('copy-student').onclick=()=>copy('student-link');$('copy-teacher').onclick=()=>copy('teacher-link');
+$('copy-reentry').onclick=()=>copy('reentry-link');
+$('trash-toggle').onclick=()=>{trash=!trash;$('trash-toggle').textContent=trash?'학생 목록으로':'휴지통';$('reentry').hidden=true;list(true);};
 async function imageFile(file){
   if(!file||!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>10000000)throw Error('10MB 이하 PNG, JPG, WebP, GIF 그림을 골라주세요.');
   const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});const c=document.createElement('canvas'),ratio=Math.min(1,640/Math.max(img.width,img.height));c.width=Math.max(1,Math.round(img.width*ratio));c.height=Math.max(1,Math.round(img.height*ratio));c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c;}finally{URL.revokeObjectURL(url);}
 }
 $('image').onchange=async()=>{
-  const generation=++imageGeneration;$('image-status').textContent='그림을 준비하고 있어요…';
+  const generation=++imageGeneration;pendingImage=null;$('pending-image').hidden=true;$('image-status').textContent='이미지를 준비하고 있어요…';
   try{const c=await imageFile($('image').files[0]);const blob=await new Promise(r=>c.toBlob(r,'image/webp',.8));if(!blob||blob.size>300000)throw Error('그림이 너무 복잡해요. 작은 그림으로 다시 골라주세요.');
-    let id=null;if(roomId){const data=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});id=data.image;}if(generation!==imageGeneration)return;
-    project.image=id;image=c;localImage=roomId?null:c.toDataURL('image/webp',.8);changed();$('image-status').textContent=roomId?'✓ 내 그림이 저장됐어요. 공개하면 친구에게도 보여요.':'✓ 내 그림으로 바꿨어요.';
-  }catch(e){$('image-status').textContent=e.message||'그림을 읽지 못했어요. 다른 그림을 골라주세요.';}
+    if(generation!==imageGeneration)return;pendingImage={canvas:c,blob};$('image-preview').src=c.toDataURL('image/webp',.8);$('pending-image').hidden=false;$('remove-image').hidden=false;$('image-status').textContent='선택한 이미지를 확인하고 “이미지 적용”을 눌러주세요.';
+  }catch(e){$('image-status').textContent=e.message||'이미지를 읽지 못했어요. 다른 이미지를 골라주세요.';}
 };
-$('remove-image').onclick=()=>{imageGeneration++;image=null;localImage=null;project.image=null;changed();$('image-status').textContent='준비된 그림으로 돌아왔어요.';};
+$('apply-image').onclick=async()=>{
+  if(!pendingImage)return;const generation=imageGeneration,{canvas:c,blob}=pendingImage;$('apply-image').disabled=true;$('image-status').textContent='이미지를 적용하고 있어요…';
+  try{
+    let id=null;if(roomId){const data=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});id=data.image;}if(generation!==imageGeneration)return;
+    project.image=id;image=c;localImage=roomId?null:c.toDataURL('image/webp',.8);pendingImage=null;$('pending-image').hidden=true;$('remove-image').hidden=false;changed();$('image-status').textContent='✓ 이미지를 적용했어요.';
+  }catch(e){$('image-status').textContent=e.message||'이미지를 적용하지 못했어요. 다시 눌러주세요.';}finally{$('apply-image').disabled=false;}
+};
+$('remove-image').onclick=()=>{imageGeneration++;image=null;localImage=null;project.image=null;pendingImage=null;$('pending-image').hidden=true;$('remove-image').hidden=true;$('image').value='';changed();$('image-status').textContent='✓ 업로드한 이미지를 작품에서 삭제했어요.';};
 $('export').onclick=async()=>{
   const data={version:1,project,localImage:localImage|| (image?(()=>{const c=document.createElement('canvas');c.width=image.width;c.height=image.height;c.getContext('2d').drawImage(image,0,0);return c.toDataURL('image/webp',.8);})():null)};
   const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=(project.title||'내-몸-놀이')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -203,6 +224,10 @@ async function init(){
   if(secret){write(`body-play:teacher:${roomId}`,secret);history.replaceState(null,'',location.pathname+location.search);}
   teacherToken=params.get('role')==='student'?'':secret||read(`body-play:teacher:${roomId}`)||'';
   try{room=await request(`/api/rooms/${roomId}`,{token:teacherToken});if(teacherToken&&!room.teacher)teacherToken='';$('room-title').textContent=room.title;$('local-note').textContent='선택과 그림이 수업에 저장돼요. 공개한 작품은 이 수업의 친구가 해볼 수 있어요.';$('teacher-entry').hidden=true;
+    if(fragment.get('student')&&fragment.get('key')) {
+      const id=fragment.get('student'),key=fragment.get('key'),w=await request(`${base()}/${encodeURIComponent(id)}`,{token:key});if(!w.owner)throw Error('이 학생 링크로 편집할 수 없어요. 선생님께 새 링크를 부탁해주세요.');
+      teacherToken='';identity={id:w.id,name:w.name,secret:key};localName=w.name;revision=0;savedRevision=0;viewing=null;loadProject(w.project);renderNotes(w.feedback);persist();history.replaceState(null,'',location.pathname+location.search);editing();return;
+    }
     if(teacherToken){$('class-name').textContent=room.title;const classUrl=`${location.origin}${location.pathname}?room=${roomId}`;$('student-link').value=classUrl+'&role=student';$('teacher-link').value=classUrl+`#teacher=${teacherToken}`;show('classroom');list(true);}
   }catch(e){$('entry-status').textContent=e.message;$('join-button').disabled=true;}
 }

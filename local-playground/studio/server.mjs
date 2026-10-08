@@ -12,6 +12,7 @@ async function body(req) {
 }
 const clean=(v,n)=>typeof v==='string'?v.trim().slice(0,n):'';
 const projectOf=value=>{try{return normalize(value);}catch(error){fail(error.message);}};
+const owns=async(req,work)=>{const value=auth(req)&&await hash(auth(req));return !!value&&(value===work.owner_hash||value===work.access_hash);};
 export async function api(req,env) {
   try {
     if(!env.DB)fail('수업 저장소가 아직 준비되지 않았어요.',503);
@@ -32,17 +33,31 @@ export async function api(req,env) {
     if(parts[3]!=='works')fail('주소를 확인해주세요.',404);
     if(parts.length===4 && method==='POST') {
       const b=await body(req),name=clean(b.name,24);if(!name)fail('이름이나 별명을 적어주세요.');
-      const count=await one('SELECT COUNT(*) AS n FROM studio_works WHERE room_id=?',room.id);if(count.n>=40)fail('이 수업의 자리가 모두 찼어요. 선생님께 알려주세요.',409);
+      const count=await one('SELECT COUNT(*) AS n FROM studio_works WHERE room_id=? AND deleted_at IS NULL',room.id);if(count.n>=40)fail('이 수업의 자리가 모두 찼어요. 선생님께 알려주세요.',409);
       const id=crypto.randomUUID(),secret=token();
-      await run('INSERT INTO studio_works VALUES (?,?,?,?,?,?,?)',id,room.id,name,await hash(secret),JSON.stringify(fromPreset()),null,Date.now());
+      await run('INSERT INTO studio_works (id,room_id,name,owner_hash,draft,published,updated_at) VALUES (?,?,?,?,?,?,?)',id,room.id,name,await hash(secret),JSON.stringify(fromPreset()),null,Date.now());
       return json({id,name,secret},201);
     }
     if(parts.length===4 && method==='GET') {
-      const rows=await env.DB.prepare('SELECT id,name,draft,published,updated_at FROM studio_works WHERE room_id=? ORDER BY updated_at DESC').bind(room.id).all();
+      const deleted=url.searchParams.get('deleted')==='1';if(deleted&&!teacher)fail('선생님만 휴지통을 볼 수 있어요.',403);
+      const rows=await env.DB.prepare(`SELECT id,name,draft,published,updated_at FROM studio_works WHERE room_id=? AND deleted_at IS ${deleted?'NOT ':''}NULL ORDER BY updated_at DESC`).bind(room.id).all();
       return json({works:rows.results.filter(r=>teacher||r.published).map(r=>{const p=JSON.parse(teacher?r.draft:r.published);return {id:r.id,name:r.name,title:p.title||`${r.name}의 놀이`,toy:p.toy,connections:sentence(p),published:!!r.published,updatedAt:r.updated_at};})});
     }
     const work=await one('SELECT * FROM studio_works WHERE id=? AND room_id=?',parts[4],room.id);if(!work)fail('작품을 찾지 못했어요.',404);
-    const owner=!!auth(req) && await hash(auth(req))===work.owner_hash;
+    if(parts[5]==='restore' && method==='POST') {
+      if(!teacher)fail('선생님만 복원할 수 있어요.',403);
+      await run('UPDATE studio_works SET deleted_at=NULL WHERE id=?',work.id);return json({ok:true});
+    }
+    if(work.deleted_at!==null)fail('삭제된 작품이에요. 선생님께 복원을 부탁해주세요.',404);
+    if(parts.length===5 && method==='DELETE') {
+      if(!teacher)fail('선생님만 작품을 삭제할 수 있어요.',403);
+      await run('UPDATE studio_works SET deleted_at=? WHERE id=?',Date.now(),work.id);return json({ok:true});
+    }
+    if(parts[5]==='student-link' && method==='POST') {
+      if(!teacher)fail('선생님만 학생 링크를 만들 수 있어요.',403);
+      const secret=token();await run('UPDATE studio_works SET access_hash=? WHERE id=?',await hash(secret),work.id);return json({id:work.id,name:work.name,secret});
+    }
+    const owner=await owns(req,work);
     if(parts[5]==='image') {
       if(method==='POST') {
         if(!owner)fail('내 작품에서 그림을 골라주세요.',403);
@@ -63,8 +78,8 @@ export async function api(req,env) {
     if(parts[5]==='feedback' && method==='POST') {
       const b=await body(req);let author='선생님';
       if(!teacher) {
-        const from=await one('SELECT name,owner_hash FROM studio_works WHERE id=? AND room_id=?',b.from,room.id);
-        if(!work.published||!from||await hash(auth(req))!==from.owner_hash)fail('수업에 들어온 뒤 친구 작품에 남겨주세요.',403);
+        const from=await one('SELECT name,owner_hash,access_hash FROM studio_works WHERE id=? AND room_id=? AND deleted_at IS NULL',b.from,room.id);
+        if(!work.published||!from||!await owns(req,from))fail('수업에 들어온 뒤 친구 작품에 남겨주세요.',403);
         author=from.name;
       }
       const message=clean(b.message,240);if(!message)fail('한 문장을 적어주세요.');
