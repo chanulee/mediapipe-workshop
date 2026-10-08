@@ -2,7 +2,7 @@ import { toys as originalToys } from '../kids/catalog.mjs';
 import { gameToys, gameOutputs } from './games.mjs';
 import { sources, pointers, mappedValue } from '../kids/inputs.mjs';
 export const toys={...originalToys,...gameToys};
-export const imageKeys=['image','foodImage','coverImage',...Array.from({length:4},(_,i)=>`hazardImage${i+1}`)];
+export const imageKeys=['image','foodImage','coverImage','titleImage',...Array.from({length:4},(_,i)=>`hazardImage${i+1}`)];
 
 export const outputs = { reaction:'장난감의 반응', ...gameOutputs };
 export const allowedOutputs=toy=>Object.fromEntries(Object.entries(outputs).filter(([key])=>Object.hasOwn(gameToys,toy)?key!=='reaction'&&(toy==='catch'||!['moveX','moveY'].includes(key)):!['moveX','moveY'].includes(key)));

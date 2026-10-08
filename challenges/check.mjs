@@ -4,6 +4,8 @@ import { normalize } from '../studio/model.mjs';
 for(let i=0;i<gamePresets.length;i++)assert.deepEqual(normalize(gamePreset(i)),gamePreset(i));
 const unsafe=gamePreset();unsafe.settings.duration=9999;unsafe.settings.hazards=-10;unsafe.settings.avatar='<script>';unsafe.settings.untrusted=1;
 const clean=normalize(unsafe);assert.equal(clean.settings.duration,120);assert.equal(clean.settings.hazards,0);assert.equal(clean.settings.avatar,'✦');assert.equal(clean.settings.untrusted,undefined);
+assert.equal(normalize({...gamePreset(),settings:{...gamePreset().settings,hazards:10}}).settings.hazards,3);
+assert.equal(normalize({...gamePreset(),titleImage:'not-an-image'}).titleImage,null);
 assert.throws(()=>normalize({...gamePreset(),connections:gamePreset().connections.slice(0,1)}));
 const expanded=gamePreset();expanded.connections.push({...expanded.connections[0],source:'mouth',output:'size'},{...expanded.connections[0],source:'tilt',output:'rotate'});assert.equal(normalize(expanded).connections.length,4);
 const game=createGame(()=>.5),fit=gamePreset(2).settings;

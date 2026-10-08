@@ -19,23 +19,31 @@ document.querySelector('.connections-section').before(rulesPanel);
 const gameStyle=document.createElement('link');gameStyle.rel='stylesheet';gameStyle.href=new URL('./games.css',import.meta.url);document.head.append(gameStyle);
 const params=new URLSearchParams(location.search), roomId=params.get('room');
 let teacherToken='', identity=null, project=fromPreset(), image=null, localImage=null, localName='', viewing=null, room=null, mode='welcome';
-let extraImages={},localImages={},imageKey='image',assetGeneration=0,shareUntil=0;
+let extraImages={},localImages={},assetGeneration=0,shareUntil=0;
 function imageData(img){if(!img)return null;const c=document.createElement('canvas');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);return c.toDataURL('image/webp',.8);}
-const imageSlot=document.createElement('label');imageSlot.className='control';imageSlot.textContent='어디에 넣을 그림인가요?';
-const imageSelect=document.createElement('select');imageSelect.setAttribute('aria-label','이미지 자리');imageSlot.append(imageSelect);$('image-control').prepend(imageSlot);
-const appliedImage=document.createElement('img');appliedImage.className='applied-image';appliedImage.alt='현재 적용한 이미지';appliedImage.hidden=true;imageSlot.after(appliedImage);
-function slotImage(key=imageKey){return key==='image'?image:extraImages[key];}
-function slotLocal(key=imageKey){return key==='image'?localImage:localImages[key];}
+const imageCards=new Map(),imageGrid=document.createElement('div');imageGrid.className='image-grid';
+const imageHint=document.createElement('p');imageHint.className='small';imageHint.textContent='각 자리에 그림을 골라주세요. 선택하면 바로 적용돼요.';
+const imageStatus=document.createElement('p');imageStatus.id='image-status';imageStatus.className='small';imageStatus.setAttribute('role','status');
+$('image-control').replaceChildren(imageHint,imageGrid,imageStatus);
+for(const [key,label,hint,shape]of [['image','내 캐릭터','내 움직임을 따라다녀요','square'],['foodImage','별','모아서 점수를 얻어요','square'],...Array.from({length:3},(_,i)=>[`hazardImage${i+1}`,`장애물 ${i+1}`,'닿으면 정해둔 규칙이 작동해요','square']),['coverImage','배경','세로 이미지 · 9:16','portrait'],['titleImage','게임 타이틀','시작 화면과 친구 목록 · 4:3','landscape']]){
+  const section=document.createElement('section');section.className=`image-card ${shape}`;section.dataset.slot=key;
+  const title=document.createElement('h3');title.textContent=label;const note=document.createElement('p');note.textContent=hint;
+  const preview=document.createElement('div');preview.className='image-card-preview';const img=document.createElement('img');img.alt=label+' 미리보기';img.hidden=true;const empty=document.createElement('span');empty.textContent=shape==='portrait'?'9:16':shape==='landscape'?'4:3':'＋';preview.append(img,empty);
+  const upload=document.createElement('label');upload.className='image-pick';const uploadText=document.createElement('span');uploadText.textContent='이미지 넣기';const file=document.createElement('input');file.type='file';file.accept='image/png,image/jpeg,image/webp,image/gif';file.setAttribute('aria-label',label+' 이미지 선택');upload.append(uploadText,file);
+  const remove=document.createElement('button');remove.textContent='삭제';remove.setAttribute('aria-label',label+' 이미지 삭제');remove.hidden=true;
+  const status=document.createElement('p');status.className='image-card-status';status.setAttribute('role','status');section.append(title,note,preview,upload,remove,status);imageGrid.append(section);
+  const card={section,img,empty,file,uploadText,remove,status,busy:false,serial:0};imageCards.set(key,card);
+  file.onchange=()=>uploadSlot(key,file.files[0]);
+  remove.onclick=()=>{card.serial++;setSlot(key,null,null);project[key]=null;card.file.value='';card.status.textContent='삭제했어요';imagePanel();changed();};
+}
+function slotImage(key){return key==='image'?image:extraImages[key];}
+function slotLocal(key){return key==='image'?localImage:localImages[key];}
 function setSlot(key,img,local){if(key==='image'){image=img;localImage=local;}else{extraImages[key]=img;localImages[key]=local;}}
 function imagePanel(){
-  imageSelect.replaceChildren();for(const [key,label]of Object.entries(isGame()?{image:'조종 캐릭터 (커서)',...(project.toy==='catch'?{foodImage:'먹이 (별)',...Object.fromEntries(Array.from({length:project.settings.hazards},(_,i)=>[`hazardImage${i+1}`,`장애물 ${i+1}`]))}:{}),coverImage:'세계관 대표 이미지 · 배경'}:{image:'내 그림'})){const o=document.createElement('option');o.value=key;o.textContent=label;imageSelect.append(o);}
-  if(![...imageSelect.options].some(o=>o.value===imageKey))imageKey='image';imageSelect.value=imageKey;
-  const img=slotImage();appliedImage.hidden=!img;if(img)appliedImage.src=imageData(img);
-  $('remove-image').hidden=!project[imageKey]&&!slotLocal()&&!pendingImage;
+  for(const [key,card]of imageCards){card.section.hidden=key!=='image'&&(!isGame()||project.toy!=='catch'&&key!=='coverImage'&&key!=='titleImage');const img=slotImage(key);card.img.hidden=!img;card.empty.hidden=!!img;if(img)card.img.src=imageData(img);else card.img.removeAttribute('src');card.remove.hidden=!project[key]&&!slotLocal(key);card.remove.disabled=card.busy;card.file.disabled=card.busy;card.uploadText.textContent=card.busy?'적용 중…':img||project[key]?'바꾸기':'이미지 넣기';}
 }
-imageSelect.onchange=()=>{imageKey=imageSelect.value;imageGeneration++;pendingImage=null;$('pending-image').hidden=true;$('image').value='';$('image-status').textContent='';imagePanel();};
 let tracker=null, video=null, face=null, hands=[], demo=true, cameraGeneration=0, cameraBusy=false;
-let mouse={x:.5,y:.5}, values=[.25,.25], demoValues=[.25,.25], last=0, saveTimer, revision=0, savedRevision=0, savePromise=null, imageGeneration=0, selectedPreset=0, pendingImage=null, trash=false;
+let mouse={x:.5,y:.5}, values=[.25,.25], demoValues=[.25,.25], last=0, saveTimer, revision=0, savedRevision=0, savePromise=null, selectedPreset=0, trash=false;
 const storageKey=`${challengeMode?'body-challenge':'body-play'}:${roomId||'solo'}`;
 function read(key){try{return JSON.parse(localStorage.getItem(key));}catch{return null;}}
 function write(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{$('save-state').textContent='기기 저장 공간이 부족해요. 놀이 파일로 저장해주세요.';return false;}}
@@ -126,8 +134,8 @@ function panel() {
   for(const [i,button]of [...$('presets').children].entries())button.setAttribute('aria-pressed',String(i===selectedPreset));
 }
 function loadProject(p,{local=null,extras={}}={}) {
-  capture.stop();renderer.mute();renderer.clear();project=normalize(p);if(isGame())game.engine.reset(project.settings);selectedPreset=presets.findIndex(p=>p[0]===project.toy&&p[2]===project.connections[0].source&&p[3]===project.connections[0].output);if(selectedPreset<0)selectedPreset=Math.max(0,presets.findIndex(p=>p[0]===project.toy));values=[.5,.5];image=null;localImage=local;imageGeneration++;pendingImage=null;$('pending-image').hidden=true;$('image-status').textContent='';$('image').value='';$('remove-image').hidden=!project.image&&!local;panel();
-  extraImages={};localImages={...extras};imagePanel();const generation=++assetGeneration;
+  capture.stop();renderer.mute();renderer.clear();project=normalize(p);if(isGame())game.engine.reset(project.settings);selectedPreset=presets.findIndex(p=>p[0]===project.toy&&p[2]===project.connections[0].source&&p[3]===project.connections[0].output);if(selectedPreset<0)selectedPreset=Math.max(0,presets.findIndex(p=>p[0]===project.toy));values=[.5,.5];image=null;localImage=local;extraImages={};localImages={...extras};const generation=++assetGeneration;
+  for(const card of imageCards.values()){card.serial++;card.busy=false;card.file.value='';card.status.textContent='';}$('image-status').textContent='';panel();
   for(const key of imageKeys){const local=slotLocal(key),assetId=project[key];
     const load=src=>{const img=new Image();img.onload=()=>{if(generation===assetGeneration&&(slotLocal(key)===local||(project[key]&&!slotLocal(key)&&!slotImage(key)))){setSlot(key,img,slotLocal(key));imagePanel();}};img.src=src;};
     if(local)load(local);
@@ -176,7 +184,7 @@ async function list(teacher=false) {
       const button=(name,action)=>{const b=document.createElement('button');b.textContent=name;b.onclick=action;card.append(b);return b;};
       if(deleted)button('복원',async()=>{try{await request(`${base()}/${w.id}/restore`,{method:'POST',data:{}});list(true);}catch(e){status.textContent=e.message;}});
       else {
-        if(w.coverImage){const cover=document.createElement('img');cover.className='work-cover';cover.alt='세계관 대표 이미지';cover.loading='lazy';cover.src=`${base()}/${w.id}/image/${w.coverImage}`;card.prepend(cover);}
+        if(w.coverImage){const cover=document.createElement('img');cover.className='work-cover';cover.alt='게임 타이틀 이미지';cover.loading='lazy';cover.src=`${base()}/${w.id}/image/${w.coverImage}`;card.prepend(cover);}
         button(teacher?'작품 열기':'플레이하기',()=>{if(Object.hasOwn(gameToys,w.toy)!==challengeMode){location.href=`../${Object.hasOwn(gameToys,w.toy)?'challenges':'studio'}/?room=${roomId}&work=${w.id}`;return;}openWork(w.id,!teacher);});
         if(w.published)button('링크 복사',async()=>{await copyWorkLink(w,card,status);});
         if(teacher){
@@ -206,25 +214,20 @@ async function imageFile(file){
   if(!file||!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>10000000)throw Error('10MB 이하 PNG, JPG, WebP, GIF 그림을 골라주세요.');
   const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});const c=document.createElement('canvas'),ratio=Math.min(1,640/Math.max(img.width,img.height));c.width=Math.max(1,Math.round(img.width*ratio));c.height=Math.max(1,Math.round(img.height*ratio));c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c;}finally{URL.revokeObjectURL(url);}
 }
-$('image').onchange=async()=>{
-  const generation=++imageGeneration;pendingImage=null;$('pending-image').hidden=true;$('image-status').textContent='이미지를 준비하고 있어요…';
-  try{const c=await imageFile($('image').files[0]);const blob=await new Promise(r=>c.toBlob(r,'image/webp',.8));if(!blob||blob.size>300000)throw Error('그림이 너무 복잡해요. 작은 그림으로 다시 골라주세요.');
-    if(generation!==imageGeneration)return;pendingImage={canvas:c,blob};$('image-preview').src=c.toDataURL('image/webp',.8);$('pending-image').hidden=false;$('remove-image').hidden=false;$('image-status').textContent='선택한 이미지를 확인하고 “이미지 적용”을 눌러주세요.';
-  }catch(e){$('image-status').textContent=e.message||'이미지를 읽지 못했어요. 다른 이미지를 골라주세요.';}
-};
-$('apply-image').onclick=async()=>{
-  if(!pendingImage)return;const generation=imageGeneration,{canvas:c,blob}=pendingImage;$('apply-image').disabled=true;$('image-status').textContent='이미지를 적용하고 있어요…';
+async function uploadSlot(key,file){
+  if(!file)return;const card=imageCards.get(key),generation=assetGeneration,serial=++card.serial,workId=identity?.id,secret=identity?.secret;card.busy=true;card.status.textContent='이미지를 준비하고 있어요…';imagePanel();
   try{
-    let id=null;if(roomId){const data=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});id=data.image;}if(generation!==imageGeneration)return;
-    project[imageKey]=id;setSlot(imageKey,c,roomId?null:c.toDataURL('image/webp',.8));pendingImage=null;$('pending-image').hidden=true;imagePanel();changed();$('image-status').textContent='✓ 이미지를 적용했어요.';
-  }catch(e){$('image-status').textContent=e.message||'이미지를 적용하지 못했어요. 다시 눌러주세요.';}finally{$('apply-image').disabled=false;}
-};
-$('remove-image').onclick=()=>{imageGeneration++;setSlot(imageKey,null,null);project[imageKey]=null;pendingImage=null;$('pending-image').hidden=true;$('image').value='';imagePanel();changed();$('image-status').textContent='✓ 선택한 자리의 이미지를 삭제했어요.';};
+    const c=await imageFile(file),blob=await new Promise(r=>c.toBlob(r,'image/webp',.8));if(!blob||blob.size>300000)throw Error('작은 그림으로 다시 골라주세요.');if(generation!==assetGeneration||serial!==card.serial)return;
+    let id=null;if(roomId){const data=await request(`${base()}/${workId}/image`,{method:'POST',blob,token:secret});id=data.image;}if(generation!==assetGeneration||serial!==card.serial)return;
+    project[key]=id;setSlot(key,c,roomId?null:c.toDataURL('image/webp',.8));changed();card.status.textContent='✓ 적용했어요';
+  }catch(e){if(generation===assetGeneration&&serial===card.serial)card.status.textContent=e.message||'다른 이미지를 골라주세요.';}
+  finally{if(generation===assetGeneration&&serial===card.serial){card.busy=false;card.file.value='';imagePanel();}}
+}
 $('export').onclick=async()=>{
   const data={version:2,project,localImage:localImage||imageData(image),localImages:Object.fromEntries(imageKeys.slice(1).map(k=>[k,slotLocal(k)||imageData(slotImage(k))]))};
   const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=(project.title||'내-몸-놀이')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-$('import').onchange=async()=>{try{const f=$('import').files[0];if(!f||f.size>3000000)throw Error('3MB 이하 놀이 파일을 골라주세요.');const data=JSON.parse(await f.text()),p=normalize(data.project),locals={image:data.localImage,...Object.fromEntries(imageKeys.slice(1).map(k=>[k,data.localImages?.[k]]))};
+$('import').onchange=async()=>{try{const f=$('import').files[0];if(!f||f.size>4000000)throw Error('4MB 이하 놀이 파일을 골라주세요.');const data=JSON.parse(await f.text()),p=normalize(data.project),locals={image:data.localImage,...Object.fromEntries(imageKeys.slice(1).map(k=>[k,data.localImages?.[k]]))};
     for(const key of imageKeys){p[key]=null;if(locals[key]&&(typeof locals[key]!=='string'||!/^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(locals[key])))throw Error('그림 형식을 읽지 못했어요.');}
     loadProject(p,{local:locals.image,extras:Object.fromEntries(imageKeys.slice(1).map(key=>[key,locals[key]]))});changed();const generation=assetGeneration;
     if(roomId)for(const key of imageKeys){if(!locals[key])continue;const blob=await(await fetch(locals[key])).blob();const response=await request(`${base()}/${identity.id}/image`,{method:'POST',blob,token:identity.secret});if(generation!==assetGeneration)return;project[key]=response.image;if(key==='image')localImage=null;else localImages[key]=null;changed();}
@@ -257,7 +260,7 @@ function draw(now){
   const target=inputPoint(demo?'mouse':s.pointer,face,hands,mouse,s.hand),point=target?(demo||s.pointer==='mouse'?{x:target.x*canvas.width,y:target.y*canvas.height}:toCanvas(target,fit)):null;
   if(isGame()){
     const control=Object.fromEntries(project.connections.map((c,i)=>[c.output,['moveX','moveY'].includes(c.output)?.5+(values[i]-.5)*c.amount:values[i]*c.amount]));
-    const state=game.draw(project.toy,s,{controls:control,valid:inputs.every(i=>i.valid),dt:dt/60,now,img:image,foodImg:extraImages.foodImage,hazardImages:Array.from({length:4},(_,i)=>extraImages[`hazardImage${i+1}`])});
+    const state=game.draw(project.toy,s,{controls:control,valid:inputs.every(i=>i.valid),dt:dt/60,now,img:image,foodImg:extraImages.foodImage,titleImg:extraImages.titleImage,hazardImages:Array.from({length:4},(_,i)=>extraImages[`hazardImage${i+1}`])});
     const label=`${state.phase}:${state.score}`;
     if($('start-game').dataset.phase!==label){
       $('start-game').dataset.phase=label;$('start-game').textContent=['won','ended','lost'].includes(state.phase)?'↻ 다시 도전':['countdown','playing'].includes(state.phase)?'↻ 처음부터 도전':'▶ 도전 시작';

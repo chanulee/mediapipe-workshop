@@ -44,7 +44,7 @@ export async function api(req,env) {
     if(parts.length===4 && method==='GET') {
       const deleted=url.searchParams.get('deleted')==='1';if(deleted&&!teacher)fail('선생님만 휴지통을 볼 수 있어요.',403);
       const rows=await env.DB.prepare(`SELECT id,name,draft,published,updated_at FROM studio_works WHERE room_id=? AND deleted_at IS ${deleted?'NOT ':''}NULL ORDER BY updated_at DESC`).bind(room.id).all();
-      return json({works:rows.results.filter(r=>teacher||r.published).map(r=>{const p=JSON.parse(teacher?r.draft:r.published);return {id:r.id,name:r.name,title:p.title||`${r.name}의 놀이`,toy:p.toy,connections:sentence(p),coverImage:!deleted&&r.published?JSON.parse(r.published).coverImage||null:null,published:!!r.published,updatedAt:r.updated_at};})});
+      return json({works:rows.results.filter(r=>teacher||r.published).map(r=>{const p=JSON.parse(teacher?r.draft:r.published),shared=r.published&&JSON.parse(r.published);return {id:r.id,name:r.name,title:p.title||`${r.name}의 놀이`,toy:p.toy,connections:sentence(p),coverImage:!deleted&&shared?(shared.titleImage||shared.coverImage||null):null,published:!!r.published,updatedAt:r.updated_at};})});
     }
     const work=await one('SELECT * FROM studio_works WHERE id=? AND room_id=?',parts[4],room.id);if(!work)fail('작품을 찾지 못했어요.',404);
     if(parts[5]==='restore' && method==='POST') {
