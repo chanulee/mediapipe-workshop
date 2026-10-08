@@ -1,0 +1,70 @@
+const range=(key,label,min,max,step=1)=>({key,label,type:'range',min,max,step});
+const common={color:'#c4ff63',background:'#101b32',cameraOpacity:.35,guides:false,hand:'auto',pointer:'nose',duration:30,goal:5,avatar:'✦'};
+const shared=[range('duration','제한 시간 (초)',10,60,5),range('goal','성공하려면 몇 번?',1,15),{key:'avatar',label:'내 캐릭터',type:'select',options:{'✦':'별','🐱':'고양이','👾':'외계인','🍊':'귤','🪩':'미러볼'}}];
+export const gameToys={
+  catch:{hint:'좌우·위아래를 다른 움직임에 연결해요. 별을 모으고 빨간 방해물은 피하세요.',defaults:{...common,playerSize:55,targetSize:40,speed:.6,hazards:0},controls:[...shared,range('playerSize','내 캐릭터 크기',25,100,5),range('targetSize','별 크기',20,90,5),range('speed','별이 움직이는 빠르기',0,2,.1),range('hazards','방해물 개수',0,4)]},
+  fit:{hint:'움직임으로 그림을 키우고 줄여 목표 테두리에 맞춰요. 맞춘 채로 잠깐 유지하면 성공!',defaults:{...common,goal:3,target:.5,tolerance:.12,hold:1.5,shuffle:true},controls:[...shared,range('target','처음 목표 크기',.15,.85,.05),range('tolerance','얼마나 넉넉하게?',.04,.25,.01),range('hold','몇 초 유지할까?',.5,3,.25),{key:'shuffle',label:'성공할 때마다 목표 바꾸기',type:'checkbox'}]},
+};
+export const gameOutputs={moveX:'좌우로 움직이기',moveY:'위아래로 움직이기',size:'커지기',rotate:'빙글 돌기',opacity:'나타나기',shake:'흔들리기'};
+export const gamePresets=[['catch','별 먹기 · 코로 조종','noseX','moveX'],['catch','별 먹기 · 손으로 조종','handX','moveX'],['fit','딱 맞춰! · 두 손으로','hands','size'],['fit','딱 맞춰! · 입으로','mouth','size']];
+export function gamePreset(index=0){const [toy,,source,output]=gamePresets[index]||gamePresets[0];const connection=(source,output)=>({source,output,sensitivity:1,reverse:false,smoothing:.35,amount:1});return {toy,settings:{...gameToys[toy].defaults},connections:toy==='catch'?[connection(source,output),connection(source==='handX'?'handY':'noseY','moveY')]:[connection(source,output)],title:toy==='catch'?'별을 모아라!':'딱 맞춰 챌린지',instruction:toy==='catch'?'움직여서 별 5개를 모아봐!':'그림을 테두리에 맞춘 채 잠깐 멈춰봐!',image:null};}
+
+// Game time advances only while inputs are visible and the page is active.
+export function createGame(random=Math.random){
+  let state;
+  const target=()=>({x:.15+random()*.7,y:.2+random()*.6,phase:random()*Math.PI*2});
+  function reset(s){state={phase:'ready',countdown:3,elapsed:0,score:0,hold:0,targetSize:s.target,star:target(),obstacles:Array.from({length:s.hazards||0},target),cooldown:0};return state;}
+  function start(s){reset(s);state.phase='countdown';}
+  function step(toy,s,control,dt,valid=true){
+    if(!state)reset(s);dt=Math.max(0,Math.min(.1,dt));
+    if(!valid||!['countdown','playing'].includes(state.phase))return state;
+    if(state.phase==='countdown'){state.countdown-=dt;if(state.countdown<=0)state.phase='playing';return state;}
+    state.elapsed+=dt;state.cooldown=Math.max(0,state.cooldown-dt);
+    if(toy==='catch'){
+      const star=position(state.star,s.speed,state.elapsed);
+      const distance=(a,b)=>Math.hypot((a.x-b.x)*540,(a.y-b.y)*960);
+      const playerSize=s.playerSize*(control.scale??1);
+      if(distance(control,star)<(playerSize+s.targetSize)/2){state.score++;state.star=target();}
+      if(!state.cooldown&&state.obstacles.some(o=>distance(control,position(o,s.speed,state.elapsed))<(playerSize+38)/2)){state.score=Math.max(0,state.score-1);state.cooldown=1;}
+    }else{
+      state.hold=Math.abs(control.size-state.targetSize)<=s.tolerance?state.hold+dt:0;
+      if(state.hold>=s.hold){state.score++;state.hold=0;if(s.shuffle)state.targetSize=.2+random()*.6;}
+    }
+    if(state.score>=s.goal)state.phase='won';else if(state.elapsed>=s.duration)state.phase='ended';
+    return state;
+  }
+  return {reset,start,step,get state(){return state;}};
+}
+export function position(p,speed,time){return{x:Math.max(.1,Math.min(.9,p.x+Math.sin(time*speed+p.phase)*.08)),y:Math.max(.15,Math.min(.87,p.y+Math.cos(time*speed+p.phase)*.05))};}
+export function createGameRenderer(canvas){
+  const ctx=canvas.getContext('2d'),engine=createGame();
+  function text(str,x,y,size=28,color='#fff'){ctx.fillStyle=color;ctx.font=`800 ${size}px system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(str,x,y);}
+  function avatar(s,img,x,y,size,rotation=0,opacity=1,shake=0,now=0){ctx.save();ctx.translate(x+Math.sin(now/45)*shake*18,y);ctx.rotate(rotation*Math.PI*2);ctx.globalAlpha=opacity;if(img){const ratio=Math.min(size/img.width,size/img.height);ctx.drawImage(img,-img.width*ratio/2,-img.height*ratio/2,img.width*ratio,img.height*ratio);}else text(s.avatar,0,size*.3,size,s.color);ctx.restore();}
+  function draw(toy,s,{controls,valid,dt,now,img}){
+    const c={x:controls.moveX??.5,y:1-(controls.moveY??.5),size:controls.size??.5,scale:controls.size==null?1:.4+controls.size*1.6};
+    const st=engine.step(toy,s,c,document.hidden?0:dt,valid);
+    ctx.fillStyle='#101b3250';ctx.fillRect(0,0,540,960);
+    text(toy==='catch'?'별 먹기 챌린지':'딱 맞춰 챌린지',270,125,24,s.color);
+    if(toy==='catch'){
+      const star=position(st.star,s.speed,st.elapsed);text('✦',star.x*540,star.y*960+15,s.targetSize,'#ffe078');
+      for(const o of st.obstacles){const p=position(o,s.speed,st.elapsed);text('✕',p.x*540,p.y*960+12,38,'#ff7d98');}
+      avatar(s,img,c.x*540,c.y*960,s.playerSize*c.scale,controls.rotate,controls.opacity==null?1:.2+.8*controls.opacity,controls.shake,now);
+    }else{
+      const radius=45+st.targetSize*150;ctx.strokeStyle=s.color;ctx.lineWidth=7;ctx.setLineDash([14,10]);ctx.beginPath();ctx.arc(270,475,radius,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+      avatar(s,img,270,475,(45+c.size*150)*2,controls.rotate,controls.opacity==null?1:.2+.8*controls.opacity,controls.shake,now);
+      ctx.fillStyle='#ffffff35';ctx.fillRect(100,720,340,12);ctx.fillStyle=s.color;ctx.fillRect(100,720,340*Math.min(1,st.hold/s.hold),12);
+      text(Math.abs(c.size-st.targetSize)<=s.tolerance?'좋아! 그대로 유지해!':'테두리 크기에 맞춰봐',270,685,25);
+    }
+    text(`${st.score} / ${s.goal}`,85,65,35,s.color);text(`${Math.max(0,Math.ceil(s.duration-st.elapsed))}초`,455,65,30);
+    if(!valid&&['countdown','playing'].includes(st.phase)){ctx.fillStyle='#101b32cc';ctx.fillRect(20,780,500,90);text('움직임을 찾으면 다시 시작해요',270,832,23);}
+    if(st.phase==='countdown')text(String(Math.max(1,Math.ceil(st.countdown))),270,460,140);
+    if(['ready','won','ended'].includes(st.phase)){
+      ctx.fillStyle='#101b32dd';ctx.fillRect(45,330,450,280);
+      text(st.phase==='ready'?'몸으로 도전!':st.phase==='won'?'도전 성공!':'한 번 더 도전?',270,415,38,s.color);
+      text(st.phase==='ready'?'도전 시작을 눌러요':`${st.score}개 성공 · ${st.elapsed.toFixed(1)}초`,270,480,25);
+      text(st.phase==='ready'?'카메라 또는 연습 슬라이더로 조종':'설정을 바꾸고 다시 해봐요',270,540,20);
+    }
+    return st;
+  }
+  return {engine,draw};
+}

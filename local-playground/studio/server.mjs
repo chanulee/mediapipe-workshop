@@ -35,7 +35,8 @@ export async function api(req,env) {
       const b=await body(req),name=clean(b.name,24);if(!name)fail('이름이나 별명을 적어주세요.');
       const count=await one('SELECT COUNT(*) AS n FROM studio_works WHERE room_id=? AND deleted_at IS NULL',room.id);if(count.n>=40)fail('이 수업의 자리가 모두 찼어요. 선생님께 알려주세요.',409);
       const id=crypto.randomUUID(),secret=token();
-      await run('INSERT INTO studio_works (id,room_id,name,owner_hash,draft,published,updated_at) VALUES (?,?,?,?,?,?,?)',id,room.id,name,await hash(secret),JSON.stringify(fromPreset()),null,Date.now());
+      const project=b.project?projectOf(b.project):fromPreset();
+      await run('INSERT INTO studio_works (id,room_id,name,owner_hash,draft,published,updated_at) VALUES (?,?,?,?,?,?,?)',id,room.id,name,await hash(secret),JSON.stringify(project),null,Date.now());
       return json({id,name,secret},201);
     }
     if(parts.length===4 && method==='GET') {

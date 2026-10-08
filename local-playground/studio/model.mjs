@@ -1,7 +1,10 @@
-import { toys } from '../kids/catalog.mjs';
+import { toys as originalToys } from '../kids/catalog.mjs';
+import { gameToys, gameOutputs } from './games.mjs';
 import { sources, pointers, mappedValue } from '../kids/inputs.mjs';
+export const toys={...originalToys,...gameToys};
 
-export const outputs = { reaction:'장난감의 반응', size:'커지기', rotate:'빙글 돌기', opacity:'나타나기', shake:'흔들리기' };
+export const outputs = { reaction:'장난감의 반응', ...gameOutputs };
+export const allowedOutputs=toy=>Object.fromEntries(Object.entries(outputs).filter(([key])=>Object.hasOwn(gameToys,toy)?key!=='reaction'&&(toy==='catch'||!['moveX','moveY'].includes(key)):!['moveX','moveY'].includes(key)));
 export const presets = [
   ['stretch','손으로 그림 늘리기','hands','size'],
   ['stretch','입으로 그림 돌리기','mouth','rotate'],
@@ -40,13 +43,15 @@ export function normalize(raw) {
     if(k==='pointer' && Object.hasOwn(pointers,v)) settings[k]=v;
     if(k==='hand' && ['auto','Left','Right'].includes(v)) settings[k]=v;
   }
-  const connections=(Array.isArray(raw.connections)?raw.connections:[]).slice(0,2).map(c=>{
-    if(!c || !Object.hasOwn(sources,c.source) || !Object.hasOwn(outputs,c.output)) throw new Error('움직임과 반응을 다시 골라주세요.');
+  const connections=(Array.isArray(raw.connections)?raw.connections:[]).slice(0,Object.hasOwn(gameToys,toy)?4:2).map(c=>{
+    if(!c || !Object.hasOwn(sources,c.source) || !Object.hasOwn(allowedOutputs(toy),c.output)) throw new Error('움직임과 반응을 다시 골라주세요.');
     const clean=newConnection(c.source,c.output);
     for(const [k,min,max] of [['sensitivity',.25,3],['smoothing',0,.95],['amount',0,1]]) if(Number.isFinite(c[k])) clean[k]=Math.max(min,Math.min(max,c[k]));
     clean.reverse=c.reverse===true;return clean;
   });
   if(!connections.length || new Set(connections.map(c=>c.output)).size!==connections.length) throw new Error('서로 다른 반응을 연결해주세요.');
+  const required=toy==='catch'?['moveX','moveY']:toy==='fit'?['size']:[];
+  if(required.some(output=>!connections.some(c=>c.output===output)))throw new Error('이 챌린지의 기본 조종 연결을 유지해주세요.');
   return {toy,settings,connections,title:String(raw.title||'').trim().slice(0,40),instruction:String(raw.instruction||'').trim().slice(0,160),image:typeof raw.image==='string'&&/^[a-f\d-]{36}$/.test(raw.image)?raw.image:null};
 }
 export function advanceValue(previous,input,c,dt=1) {

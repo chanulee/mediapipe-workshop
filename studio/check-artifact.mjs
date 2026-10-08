@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import worker from '../dist/server/index.js';
-for(const path of ['/kids/','/kids/app.js','/kids/style.css','/kids/inputs.mjs','/kids/toys.js','/lib/tracker.js','/studio/','/studio/app.mjs','/studio/model.mjs']){
+for(const path of ['/kids/','/kids/app.js','/kids/style.css','/kids/inputs.mjs','/kids/toys.js','/lib/tracker.js','/studio/','/studio/app.mjs','/studio/model.mjs','/challenges/','/studio/games.mjs','/studio/games.css']){
   const response=await worker.fetch(new Request('https://class.example'+path),{});
   assert.equal(response.status,200,path);
   const source=await readFile(new URL('..'+(path.endsWith('/')?path+'index.html':path),import.meta.url));
